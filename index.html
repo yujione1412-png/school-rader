@@ -2,7 +2,7 @@
 <!--
 ═══════════════════════════════════════════════════════════════════════════
   スクールレーダー （school-radar）
-  現在バージョン: v1.2.0
+  現在バージョン: v1.3.0
 ═══════════════════════════════════════════════════════════════════════════
 
 ■ このファイルでできること
@@ -19,6 +19,8 @@
   ・右上の ☰ でメニューを開ける（地図の上にウインドウで出る）
       校区を調べる … 熊本市の住所別の校区表。あ・か・さ・た・な・は・ま・やらわ の行ごとに見られ、
                      町名（漢字・ひらがなの読み・番地つき住所でも可）で検索できる。「地図で調べる」で地図に移れる
+                     上の切り替えで「熊本市以外」にすると、県内の他の市町村の校区を
+                     住所・町名（場所を探してその地点の校区を表示）／学校名（その学校の校区を表示）／市町村ごとの一覧 で調べられる
       ルート表示の履歴 … これまでに表示したルート
       アプリを更新 … 公開中の最新版を確かめてから、古い保存ファイルを消して開き直す
   ・対応地域は熊本県内のみ
@@ -82,6 +84,9 @@
   ・右上の「履歴」ボタンはメニュー（☰）の中に移した。スマホの幅で🔍・履歴・☰を並べると収まらないため
   ・校区表は、索引簿の書き方（番地の範囲の文字）をそのまま見せる。自分で読み替えると間違いのもとになるため
   ・校区表の五十音の行は、索引簿の読み仮名の1文字目で決める（PDFが行ごとに分かれているのと同じ分け方）
+  ・熊本市以外は、市町村が「住所→校区」の表を公開していないため、熊本市と同じ町名の表は作らない。
+    代わりに、住所・町名は「場所を探して、その地点が入る校区（国の範囲データ）」で判定し、
+    学校名は「その学校の校区の範囲を地図に出す」形にした（どちらも推測を入れず、国のデータそのままで正確なため）
   ・データは「data/〇〇.json?v=バージョン」で読む。バージョンを上げれば古いデータが残らないようにするため。
     「アプリを更新」は、公開中の index.html の APP_VERSION を読んで比べ、?u= を付けて開き直す（データも取り直す）
 
@@ -121,6 +126,13 @@
           ・右上の「履歴」ボタンをメニューの中に移動
           ・データ読み込みにバージョン番号を付け、更新後に古いデータが残らないようにした
           ・熊本市のデータに、校区表用の読み仮名・五十音の行・索引簿どおりの番地の文字を追加
+  v1.3.0  熊本市以外の校区を検索で調べられるようにした
+          ・「校区を調べる」に「熊本市」「熊本市以外」の切り替えを追加
+          ・熊本市以外：住所・町名を入れると場所の候補を出し、選ぶとその地点の小・中学校区を地図で表示
+          ・熊本市以外：学校名（例: 代陽小、第一中）で、その学校の校区を探して「地図で見る」で範囲を表示
+          ・熊本市以外：市町村ごと（43市町村）の小学校区・中学校区の一覧を追加
+          ・校区データに市町村名（m）を追加（変換ツールも対応）
+          ・検索ボタンを押した直後に、入力中の自動絞り込みが表示を消してしまう不具合を修正
 
 ■ 使っている無料サービス（すべてカード登録不要）
   ・Leaflet 1.9.4 …………… 地図の表示（CDN: cdnjs）
@@ -137,6 +149,8 @@
     熊本市は市の索引簿で判定（v1.1.0〜）。大津町は最寄りの学校を参考として出すだけです
   ・熊本市の判定は「住所の文字」が頼り。地図の位置からの住所推定（YOLP）がずれたり、番地まで取れなかったりすると
     「候補」表示になるか、町が見つからず「参考・最寄り」になる。確実に知りたいときは🔍で番地まで入力する
+  ・熊本市以外の住所・町名検索は、Yahoo!の住所検索で場所を探してから判定する。大字が広い町や、
+    同じ町名が複数ある場合は、候補の場所によって校区が変わるので、番地まで入れるか地図で場所を確かめる
   ・熊本市の索引簿は随時更新されるので、変わったらPDFを取り直して tools/make_kumamoto.py で作り直す
   ・住居番号（〇番〇号）と地番（〇番地）は別物。索引簿の欄を両方見て判定しているが、まれに取り違える可能性がある
   ・校区は国のデータ作成時点のもの。統廃合・校区変更・特認校・選択制は反映されないことがある。
@@ -321,6 +335,22 @@ button{ font-family:inherit; cursor:pointer; border:none; background:none; color
 .kt-sc .tag{ width:20px; height:20px; font-size:11px; border-radius:6px; }
 .kt-z{ margin-top:6px; background:#FFF8E6; border-radius:8px; padding:6px 8px; font-size:11.5px; color:#7A5600; line-height:1.55; word-break:break-all; }
 .kt-z b{ color:#5C4100; }
+/* 「熊本市」「熊本市以外」の切り替え */
+#ktArea{ display:flex; background:#ECEFF4; border-radius:999px; padding:3px; margin-bottom:8px; }
+#ktArea button{ flex:1; border-radius:999px; padding:7px 0; font-size:13px; font-weight:800; color:#6B7486; }
+#ktArea button.on{ background:#fff; color:var(--main); box-shadow:0 1px 4px rgba(0,0,0,.12); }
+/* 熊本市以外：市町村の一覧と校区の行 */
+.kp-munis{ display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; padding:4px 0 8px; }
+.kp-munis button{ border:1px solid #E3E6EC; border-radius:12px; padding:9px 4px; font-size:13px; font-weight:700; line-height:1.3; }
+.kp-munis button small{ display:block; font-size:10px; color:#8A93A3; font-weight:600; margin-top:2px; }
+.kp-h{ font-size:12px; font-weight:800; color:#5B6578; margin:12px 4px 4px; }
+.kp-row{ display:flex; align-items:center; gap:8px; padding:9px 6px; border-bottom:1px solid #EEF0F4; }
+.kp-row b{ flex:1; min-width:0; font-size:14px; }
+.kp-row b small{ font-size:11px; color:#8A93A3; font-weight:600; margin-left:5px; }
+.kp-addr{ display:flex; align-items:center; gap:8px; width:100%; text-align:left; margin:6px 0 4px;
+  border-radius:12px; padding:11px 12px; background:#EEF2FA; color:var(--main); font-size:13.5px; font-weight:700; }
+.kp-cand{ display:block; width:100%; text-align:left; padding:10px 8px; border-bottom:1px solid #EEF0F4; font-size:13.5px; font-weight:700; }
+.kp-cand small{ display:block; font-size:11px; color:#8A93A3; font-weight:500; }
 .kt-empty{ padding:30px 10px; text-align:center; color:#8A93A3; font-size:13px; line-height:1.7; }
 
 /* ---- 場所の入力検索パネル（上から出る・選ぶと閉じる） ---- */
@@ -738,7 +768,7 @@ input[type=range]{ flex:1; accent-color:var(--main); height:22px; min-width:0; }
 /* ════════════════════════════════════════════════════════════
    基本設定
    ════════════════════════════════════════════════════════════ */
-const APP_VERSION = '1.2.0';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
+const APP_VERSION = '1.3.0';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
 document.getElementById('verLabel').textContent = 'v' + APP_VERSION;
 
 // Yahoo!のClient ID（コンビニレーダーと同じもの）。住所の入力検索・地点の住所表示に使う
@@ -2000,7 +2030,7 @@ function showMenuHome(){
     '<button class="menu-x" onclick="closeMenu()" aria-label="閉じる">×</button>';
   $('menuBody').innerHTML =
     '<button class="menu-item" onclick="showKuTable()"><span class="ic">🏫</span>' +
-      '<div><b>校区を調べる</b><span>熊本市の住所別の校区表（あ・か・さ・た・な…別／町名で検索）</span></div><span class="arrow">›</span></button>' +
+      '<div><b>校区を調べる</b><span>熊本市の住所別の校区表（あ・か・さ・た・な…別／町名で検索）・熊本市以外は住所や学校名で検索</span></div><span class="arrow">›</span></button>' +
     '<button class="menu-item" onclick="closeMenu(); openSheet()"><span class="ic">🕘</span>' +
       '<div><b>ルート表示の履歴</b><span>これまでに表示したルートをもう一度見る</span></div><span class="arrow">›</span></button>' +
     '<button class="menu-item" onclick="updateApp()"><span class="ic">🔄</span>' +
@@ -2039,21 +2069,26 @@ async function updateApp(){
 const KT_GYO = [['あ','あ'],['か','か'],['さ','さ'],['た','た'],['な','な'],['は','は'],['ま','ま'],['や','やらわ']];
 let ktGyo = 'あ';     // いま開いている行
 let ktShown = [];     // いま表に出している町（「地図で調べる」が番号で参照する）
+let ktTimer = null;   // 熊本市の検索：入力中の自動絞り込み用のタイマー
+
+let kpTimer = null; // 熊本市以外の検索：入力中の自動絞り込み用のタイマー
+let ktArea = 'city'; // 'city' = 熊本市（索引簿の表） / 'pref' = 熊本市以外（国の校区データ）
 
 async function showKuTable(){
   $('menuHead').innerHTML = '<button class="menu-back" onclick="showMenuHome()" aria-label="戻る">‹</button>' +
-    '<h2>校区を調べる<small>熊本市</small></h2>' +
+    '<h2>校区を調べる<small>熊本県</small></h2>' +
     '<button class="menu-x" onclick="closeMenu()" aria-label="閉じる">×</button>';
   $('menuBody').innerHTML = '<div class="kt-empty">校区表を読み込んでいます…</div>';
   await loadData();
+  if (ktArea === 'pref') return showPrefTable();
   if (!DATA.kmm || !DATA.kmm.list){
     $('menuBody').innerHTML = '<div class="kt-empty">校区表（data/kumamoto_city.json）が読み込めませんでした。<br>' +
       'data フォルダが公開されているか確認し、メニューの「アプリを更新」を試してください。</div>';
     return;
   }
   $('menuBody').innerHTML =
-    '<div class="kt-top">' +
-      '<div class="kt-note">熊本市の索引簿（' + esc(DATA.kmm.ver || '') + '）の内容です。熊本市以外の市町村は、地図で地点を調べると校区が出ます。</div>' +
+    '<div class="kt-top">' + ktAreaHtml() +
+      '<div class="kt-note">熊本市の索引簿（' + esc(DATA.kmm.ver || '') + '）の内容です。熊本市以外は上の「熊本市以外」で調べられます。</div>' +
       '<form id="ktForm" autocomplete="off" onsubmit="event.preventDefault(); ktSearch()">' +
         '<input id="ktInput" type="search" enterkeyhint="search" placeholder="町名・読みで検索（例: 麻生田）" oninput="ktSearchLive()">' +
         '<button id="ktGo" type="submit">検索</button></form>' +
@@ -2062,6 +2097,152 @@ async function showKuTable(){
     '</div>' +
     '<div id="ktList"></div>';
   ktTab(ktGyo);
+}
+
+// 「熊本市」「熊本市以外」の切り替えボタン
+function ktAreaHtml(){
+  return '<div id="ktArea">' +
+    '<button class="' + (ktArea === 'city' ? 'on' : '') + '" onclick="ktArea=\'city\'; showKuTable()">熊本市</button>' +
+    '<button class="' + (ktArea === 'pref' ? 'on' : '') + '" onclick="ktArea=\'pref\'; showKuTable()">熊本市以外</button></div>';
+}
+
+/* ---- 熊本市以外（国の校区データ）：住所・町名か学校名で探す／市町村ごとの一覧 ---- */
+function showPrefTable(){
+  if (!DATA.e && !DATA.j){
+    $('menuBody').innerHTML = '<div class="kt-top">' + ktAreaHtml() + '</div>' +
+      '<div class="kt-empty">校区データ（data フォルダ）が読み込めませんでした。<br>メニューの「アプリを更新」を試してください。</div>';
+    return;
+  }
+  $('menuBody').innerHTML =
+    '<div class="kt-top">' + ktAreaHtml() +
+      '<div class="kt-note">国の校区データ（' + esc((DATA.meta && DATA.meta.year) || '') + '）です。住所・町名（例: 八代市日置町）か学校名（例: 代陽小）で検索するか、下の市町村を選んでください。※大津町は校区データがありません。</div>' +
+      '<form id="ktForm" autocomplete="off" onsubmit="event.preventDefault(); kpSearch()">' +
+        '<input id="ktInput" type="search" enterkeyhint="search" placeholder="住所・町名・学校名で検索" oninput="kpSearchLive()">' +
+        '<button id="ktGo" type="submit">検索</button></form>' +
+    '</div>' +
+    '<div id="ktList"></div>';
+  kpMuniList();
+}
+// 校区の一覧（小・中）。市町村ごとにまとめる
+function kpAll(){
+  const out = [];
+  ['e', 'j'].forEach(cat => (DATA[cat] ? DATA[cat].features : []).forEach((f, i) => out.push({ cat, i, f })));
+  return out;
+}
+function kpMunis(){
+  const m = {};
+  kpAll().forEach(x => {
+    const k = x.f.properties.c + '|' + x.f.properties.m;
+    m[k] = m[k] || { c: x.f.properties.c, m: x.f.properties.m, e: 0, j: 0 };
+    m[k][x.cat]++;
+  });
+  return Object.values(m).sort((a, b) => a.c.localeCompare(b.c));
+}
+// 何も入れていないとき：市町村のボタンを並べる
+function kpMuniList(){
+  const ms = kpMunis();
+  $('ktList').innerHTML = '<div class="kt-count">市町村を選ぶと、その小学校区・中学校区の一覧が出ます（' + ms.length + '市町村）</div>' +
+    '<div class="kp-munis">' + ms.map(x =>
+      '<button onclick="kpMuni(\'' + x.c + '\')">' + esc(x.m) + '<small>小' + x.e + '・中' + x.j + '</small></button>').join('') + '</div>';
+  $('menuBody').scrollTop = 0;
+}
+// 校区1件の行（「地図で見る」ボタンつき）
+function kpRowHtml(x){
+  const p = x.f.properties;
+  return '<div class="kp-row"><span class="tag ' + x.cat + '">' + (x.cat === 'e' ? '小' : '中') + '</span>' +
+    '<b>' + esc(p.n.replace(/^.{1,6}?[市町村]立/, '')) + '区<small>' + esc(p.m || '') + '</small></b>' +
+    '<button class="kt-map" onclick="kpShowKu(\'' + x.cat + '\',' + x.i + ')">地図で見る</button></div>';
+}
+// 市町村を選んだとき：その市町村の小学校区・中学校区を一覧にする
+function kpMuni(code){
+  const list = kpAll().filter(x => x.f.properties.c === code);
+  const name = list.length ? list[0].f.properties.m : '';
+  const e = list.filter(x => x.cat === 'e'), j = list.filter(x => x.cat === 'j');
+  $('ktList').innerHTML =
+    '<button class="kp-addr" onclick="kpMuniList()">‹ 市町村の一覧に戻る</button>' +
+    '<div class="kt-count">' + esc(name) + '：小学校区 ' + e.length + '・中学校区 ' + j.length + '</div>' +
+    '<div class="kp-h">小学校区</div>' + e.map(kpRowHtml).join('') +
+    '<div class="kp-h">中学校区</div>' + j.map(kpRowHtml).join('');
+  $('menuBody').scrollTop = 0;
+}
+// 検索：①住所・町名として地図で探すボタン ②市町村名に当たればその一覧 ③学校名に当たる校区
+function kpSearch(){
+  clearTimeout(kpTimer); // 入力中の自動絞り込みが後から動いて、表示を消さないように止める
+  const raw = $('ktInput').value.trim();
+  if (!raw){ kpMuniList(); return; }
+  const q = kmmNorm(raw).replace(/^熊本県/, '');
+  const qs = normName(q).replace(/(小|中)学校$/, '$1').replace(/学校区?$|区$/, ''); // 「代陽小学校区」→「代陽小」
+  const all = kpAll();
+  const munis = kpMunis().filter(x => q.includes(x.m) || (x.m.length >= 2 && x.m.startsWith(q)));
+  const schoolHits = qs.length >= 2 ? all.filter(x => normName(x.f.properties.n).includes(qs)) : [];
+  let html = '<button class="kp-addr" onclick="kpAddr()">📍「' + esc(raw) + '」を住所・町名として、その場所の校区を調べる ›</button>' +
+    '<div id="kpCands"></div>';
+  if (munis.length){
+    html += '<div class="kp-h">市町村</div><div class="kp-munis">' + munis.map(x =>
+      '<button onclick="kpMuni(\'' + x.c + '\')">' + esc(x.m) + '<small>小' + x.e + '・中' + x.j + '</small></button>').join('') + '</div>';
+  }
+  if (schoolHits.length){
+    html += '<div class="kp-h">学校名が一致した校区（' + schoolHits.length + '件）</div>' + schoolHits.slice(0, 60).map(kpRowHtml).join('');
+  }
+  if (!munis.length && !schoolHits.length){
+    html += '<div class="kt-empty">学校名・市町村名には一致しませんでした。<br>住所・町名なら、上の📍ボタンで場所を探して校区を調べられます。</div>';
+  }
+  $('ktList').innerHTML = html;
+  $('menuBody').scrollTop = 0;
+}
+function kpSearchLive(){ clearTimeout(kpTimer); kpTimer = setTimeout(() => { if ($('ktInput').value.trim()) kpSearch(); else kpMuniList(); }, 350); }
+
+// 住所・町名で場所を探して、候補を出す（候補をタップすると、その場所の校区を地図で表示）
+let kpHits = [];
+async function kpAddr(){
+  clearTimeout(kpTimer); // 自動絞り込みで候補が消えないように止める
+  const raw = $('ktInput').value.trim();
+  const box = $('kpCands');
+  box.innerHTML = '<div class="kt-count">「' + esc(raw) + '」の場所を探しています…</div>';
+  let hits = [];
+  try{
+    if (YAHOO_CLIENT_ID){
+      const [a, pl] = await Promise.allSettled([yolpAddressSearch(raw), yolpPlaceSearch(raw)]);
+      hits = (a.status === 'fulfilled' ? a.value : []).concat(pl.status === 'fulfilled' ? pl.value : []);
+    }
+    if (!hits.filter(inPref).length) hits = await nominatimSearch(raw);
+  }catch(e){ /* 下で案内 */ }
+  kpHits = hits.filter(inPref).slice(0, 6);
+  if (!kpHits.length){
+    box.innerHTML = '<div class="kt-empty">「' + esc(raw) + '」の場所が熊本県内で見つかりませんでした。<br>「八代市日置町」のように市町村名から入れてみてください。</div>';
+    return;
+  }
+  box.innerHTML = '<div class="kt-count">場所の候補（タップすると地図で校区を表示）</div>' + kpHits.map((h, i) =>
+    '<button class="kp-cand" onclick="kpPick(' + i + ')">' + esc(h.name) + (h.addr ? '<small>' + esc(h.addr) + '</small>' : '') + '</button>').join('');
+}
+function kpPick(i){
+  const h = kpHits[i];
+  if (!h) return;
+  closeMenu();
+  const c = { lat: h.lat, lng: h.lng };
+  const label = h.name.length > 12 ? h.name.slice(0, 12) + '…' : h.name;
+  placePin(c);
+  clearRouteLayers();
+  searchArea(c, label, true, [$('ktInput') ? $('ktInput').value.trim() : '', h.name]);
+}
+// 「地図で見る」：その校区の範囲を地図に色で出し、校区の学校の場所で調べる
+async function kpShowKu(cat, i){
+  const f = DATA[cat] && DATA[cat].features[i];
+  if (!f) return;
+  closeMenu();
+  const p = f.properties;
+  const box = L.geoJSON(f).getBounds();
+  const c = p.y && p.x ? { lat: p.y, lng: p.x } : { lat: box.getCenter().lat, lng: box.getCenter().lng };
+  removePinQuiet();
+  clearRouteLayers();
+  await searchArea(c, p.n.replace(/^.{1,6}?[市町村]立/, ''), false);
+  // 選んだ校区がまだ描かれていなければ足して、校区全体が見えるように地図を合わせる
+  if (lastSearch && !lastSearch.ku[cat].includes(f)){
+    L.geoJSON(f, { renderer: kuRenderer, interactive: false,
+      style: { color: CAT_COLOR[cat], weight: 3, opacity: .9, dashArray: cat === 'j' ? '8 6' : null,
+               fillColor: CAT_COLOR[cat], fillOpacity: cat === 'e' ? .10 : .05 } }).addTo(kuLayer);
+  }
+  map.fitBounds(box, FIT_PAD);
 }
 
 // 五十音の行のタブを押したとき
@@ -2078,6 +2259,7 @@ function toKata(s){ return s.replace(/[\u3041-\u3096]/g, c => String.fromCharCod
 
 // 町名で検索（漢字でも読みでも。区や「熊本市」が入っていても探せる）
 function ktSearch(){
+  clearTimeout(ktTimer); // 入力中の自動絞り込みと二重に動かないように止める
   const raw = $('ktInput').value.trim();
   if (!raw){ ktTab(ktGyo); return; }
   let q = kmmNorm(raw).replace(/^.*?熊本県/, '').replace(/^.*?熊本市/, '');
@@ -2109,7 +2291,6 @@ function ktSearch(){
   });
   ktRender(hits, '「' + raw + '」の検索結果');
 }
-let ktTimer = null;
 function ktSearchLive(){ clearTimeout(ktTimer); ktTimer = setTimeout(() => { if ($('ktInput').value.trim().length >= 1) ktSearch(); else ktTab(ktGyo); }, 350); }
 
 // 町の一覧を表にして出す
