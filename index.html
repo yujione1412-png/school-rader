@@ -2,7 +2,7 @@
 <!--
 ═══════════════════════════════════════════════════════════════════════════
   スクールレーダー （school-radar）
-  現在バージョン: v1.1.0
+  現在バージョン: v1.2.0
 ═══════════════════════════════════════════════════════════════════════════
 
 ■ このファイルでできること
@@ -16,6 +16,11 @@
   ・学校までのルート（徒歩／車）をアプリ内に表示する。Googleマップでも開ける（ナビは自動開始しない）
   ・「校区線」ボタンで、熊本県内の小学校区・中学校区の境目をすべて表示できる
   ・ルートを表示した履歴を端末内（localStorage）に残し、あとから再表示できる
+  ・右上の ☰ でメニューを開ける（地図の上にウインドウで出る）
+      校区を調べる … 熊本市の住所別の校区表。あ・か・さ・た・な・は・ま・やらわ の行ごとに見られ、
+                     町名（漢字・ひらがなの読み・番地つき住所でも可）で検索できる。「地図で調べる」で地図に移れる
+      ルート表示の履歴 … これまでに表示したルート
+      アプリを更新 … 公開中の最新版を確かめてから、古い保存ファイルを消して開き直す
   ・対応地域は熊本県内のみ
 
 ■ 操作のきほん
@@ -28,6 +33,7 @@
   ・ルートの出発地: ◎ピンがあればピンから、なければ現在地から（自動）
   ・移動手段の初期値は「徒歩」（通学を想定）。切り替えると表示中のルートを引き直す
   ・状況カードの「ルート」ボタンで、校区の学校までのルートをワンタップで表示できる
+  ・右上は 🔍（場所を探す）と ☰（メニュー）。ルートの履歴はメニューの中にある
 
 ■ データの作り方（毎年の更新もこの方法で）
   ・data/ フォルダの3ファイルは、国土数値情報（国土交通省）の熊本県データから作る
@@ -73,6 +79,11 @@
     範囲の地図データが無いため。住所は、🔍で入力した住所 → 地図の位置から推定した住所（YOLP）の順に使う
   ・番地で校区が分かれる町で番地が分からないときは、決めつけず「候補」として全部出す（★は付けない）
   ・索引簿の学校名は略称（例: 麻生田小）なので、「〇〇小学校」「〇〇中学校」に直して学校の位置と結びつける
+  ・右上の「履歴」ボタンはメニュー（☰）の中に移した。スマホの幅で🔍・履歴・☰を並べると収まらないため
+  ・校区表は、索引簿の書き方（番地の範囲の文字）をそのまま見せる。自分で読み替えると間違いのもとになるため
+  ・校区表の五十音の行は、索引簿の読み仮名の1文字目で決める（PDFが行ごとに分かれているのと同じ分け方）
+  ・データは「data/〇〇.json?v=バージョン」で読む。バージョンを上げれば古いデータが残らないようにするため。
+    「アプリを更新」は、公開中の index.html の APP_VERSION を読んで比べ、?u= を付けて開き直す（データも取り直す）
 
 ■ バージョン履歴
   v1.0.0  最初の版（コンビニレーダー v1.6.0 をもとに作成）
@@ -101,6 +112,15 @@
           ・🔍で選んだ住所の候補は、入力した文字（番地つき）も判定の手がかりに使うようにした
           ・索引簿PDFからデータを作る変換ツール tools/make_kumamoto.py を追加
           ・出典表示に熊本市の索引簿を追加
+  v1.2.0  メニューと校区表を追加
+          ・右上に ☰ メニューボタンを追加。タップすると地図の上にメニューウインドウが開く
+          ・メニュー「校区を調べる」：熊本市の住所別の校区表を、あ・か・さ・た・な・は・ま・やらわ の行ごとに表示
+          ・校区表の町名検索を追加（漢字・ひらがなの読み・区や番地つきの住所でも探せる。入力中も自動で絞り込む）
+          ・校区表の各町に「地図で調べる」ボタン（その町の場所で、まわりの学校と校区を表示）
+          ・メニュー「アプリを更新」：公開中の最新バージョンを確認し、保存された古いファイルを消して開き直す
+          ・右上の「履歴」ボタンをメニューの中に移動
+          ・データ読み込みにバージョン番号を付け、更新後に古いデータが残らないようにした
+          ・熊本市のデータに、校区表用の読み仮名・五十音の行・索引簿どおりの番地の文字を追加
 
 ■ 使っている無料サービス（すべてカード登録不要）
   ・Leaflet 1.9.4 …………… 地図の表示（CDN: cdnjs）
@@ -219,23 +239,89 @@ button{ font-family:inherit; cursor:pointer; border:none; background:none; color
 }
 #brand small{ font-size:10.5px; color:#7B8597; font-weight:600; }
 
-/* 右上：🔍（場所の入力検索）と履歴を横に並べる */
+/* 右上：🔍（場所の入力検索）と ☰（メニュー）を横に並べる */
 #topRight{
   position:fixed; z-index:20;
   top:calc(10px + env(safe-area-inset-top)); right:12px;
   display:flex; align-items:center; gap:8px;
 }
-#historyBtn{
-  background:var(--card); box-shadow:var(--shadow);
-  border-radius:999px; padding:9px 16px;
-  font-size:13px; font-weight:700; color:var(--ink);
-}
-#findBtn{
+#findBtn, #menuBtn{
   width:38px; height:38px; border-radius:50%;
   background:var(--card); box-shadow:var(--shadow); color:var(--ink);
   display:flex; align-items:center; justify-content:center;
 }
-#findBtn svg{ width:18px; height:18px; }
+#findBtn svg, #menuBtn svg{ width:18px; height:18px; }
+
+/* ---- メニューウィンドウ（☰で地図の上に開く） ---- */
+#menuBack{
+  position:fixed; inset:0; background:rgba(20,26,40,.45);
+  z-index:110; opacity:0; pointer-events:none; transition:opacity .2s;
+}
+#menuBack.show{ opacity:1; pointer-events:auto; }
+#menu{
+  position:fixed; z-index:111; left:10px; right:10px;
+  top:calc(10px + env(safe-area-inset-top)); bottom:calc(10px + env(safe-area-inset-bottom));
+  max-width:560px; margin:0 auto;
+  background:#fff; border-radius:20px; box-shadow:var(--shadow);
+  display:flex; flex-direction:column; overflow:hidden;
+  opacity:0; transform:scale(.97); pointer-events:none; transition:opacity .18s, transform .18s;
+}
+#menu.show{ opacity:1; transform:none; pointer-events:auto; }
+.menu-head{ display:flex; align-items:center; gap:8px; padding:14px 14px 10px; border-bottom:1px solid #E3E6EC; }
+.menu-head h2{ flex:1; font-family:"Zen Maru Gothic",sans-serif; font-size:16px; font-weight:700; }
+.menu-head h2 small{ font-family:inherit; font-size:11px; color:#9AA2B1; font-weight:500; margin-left:6px; }
+.menu-x, .menu-back{
+  background:#ECEFF4; border-radius:999px; width:32px; height:32px;
+  font-size:15px; color:#5B6578; flex:none; font-weight:700;
+}
+.menu-body{ flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+.menu-item{
+  display:flex; align-items:center; gap:12px; width:100%; text-align:left;
+  padding:15px 16px; border-bottom:1px solid #EEF0F4;
+}
+.menu-item .ic{ flex:none; width:38px; height:38px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:19px; background:#EEF2FA; }
+.menu-item b{ display:block; font-size:14.5px; }
+.menu-item span{ display:block; font-size:11.5px; color:#7B8597; margin-top:2px; line-height:1.5; }
+.menu-item .arrow{ margin-left:auto; color:#B3BAC7; font-size:18px; flex:none; }
+#updateMsg{ font-size:12px; color:#2B59A8; font-weight:600; }
+.menu-credit{ padding:12px 16px 16px; font-size:10.5px; color:#9AA2B1; line-height:1.6; }
+
+/* 校区表（熊本市） */
+.kt-top{ /* 検索欄とタブは、表をスクロールしても上に残す */
+  position:sticky; top:0; z-index:2; background:#fff;
+  padding:10px 12px 8px; border-bottom:1px solid #EEF0F4; }
+.kt-note{ font-size:11px; color:#7B8597; line-height:1.5; margin-bottom:8px; }
+#ktForm{ display:flex; gap:8px; }
+#ktInput{
+  flex:1; min-width:0; border:1.5px solid #D5DAE3; border-radius:12px;
+  padding:9px 12px; font-size:16px; font-family:inherit; color:var(--ink); background:#F8F9FB; outline:none;
+  -webkit-appearance:none; appearance:none;
+}
+#ktInput:focus{ border-color:var(--main); background:#fff; }
+#ktGo{ flex:none; border-radius:12px; padding:0 14px; background:var(--main); color:#fff; font-size:13.5px; font-weight:700; }
+#ktTabs{ display:grid; grid-template-columns:repeat(8, 1fr); gap:4px; margin-top:8px; } /* 8つの行を1列に収める */
+#ktTabs button{
+  min-width:0; border-radius:999px; padding:7px 0;
+  font-size:13.5px; font-weight:800; background:#ECEFF4; color:#5B6578; white-space:nowrap;
+}
+#ktTabs button.sm{ font-size:11px; letter-spacing:-.05em; }
+#ktTabs button.on{ background:var(--main); color:#fff; }
+#ktList{ padding:6px 10px 16px; }
+.kt-count{ font-size:11.5px; color:#7B8597; padding:6px 4px; }
+.kt-town{ border:1px solid #E3E6EC; border-radius:14px; padding:10px 11px; margin:8px 0; }
+.kt-th{ display:flex; align-items:center; gap:8px; }
+.kt-th b{ font-size:15px; }
+.kt-th small{ font-size:11px; color:#7B8597; }
+.kt-map{ margin-left:auto; flex:none; border-radius:999px; padding:6px 10px; font-size:11.5px; font-weight:700; background:#EEF2FA; color:var(--main); }
+.kt-row{ border-top:1px dashed #E3E6EC; margin-top:8px; padding-top:7px; }
+.kt-rng{ font-size:12px; color:#34405A; line-height:1.55; word-break:break-all; }
+.kt-rng em{ font-style:normal; font-size:10.5px; font-weight:700; color:#7B8597; background:#F1F3F7; border-radius:5px; padding:1px 5px; margin-right:4px; }
+.kt-sc{ display:flex; gap:10px; margin-top:5px; flex-wrap:wrap; }
+.kt-sc span{ display:flex; align-items:center; gap:5px; font-size:13.5px; font-weight:700; }
+.kt-sc .tag{ width:20px; height:20px; font-size:11px; border-radius:6px; }
+.kt-z{ margin-top:6px; background:#FFF8E6; border-radius:8px; padding:6px 8px; font-size:11.5px; color:#7A5600; line-height:1.55; word-break:break-all; }
+.kt-z b{ color:#5C4100; }
+.kt-empty{ padding:30px 10px; text-align:center; color:#8A93A3; font-size:13px; line-height:1.7; }
 
 /* ---- 場所の入力検索パネル（上から出る・選ぶと閉じる） ---- */
 #findBack{
@@ -576,7 +662,9 @@ input[type=range]{ flex:1; accent-color:var(--main); height:22px; min-width:0; }
   <button id="findBtn" title="住所・施設名・学校名で探す" aria-label="住所・施設名・学校名で探す">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg>
   </button>
-  <button id="historyBtn">履歴</button>
+  <button id="menuBtn" title="メニュー" aria-label="メニュー">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 6.5h16M4 12h16M4 17.5h16"/></svg>
+  </button>
 </div>
 <div id="reticle"></div>
 <button id="kuBtn" title="校区の境目を表示">校区線</button>
@@ -625,6 +713,13 @@ input[type=range]{ flex:1; accent-color:var(--main); height:22px; min-width:0; }
   <div id="findList"></div>
 </div>
 
+<!-- ═══════ メニューウィンドウ（☰）。中身は JS で切り替える（メニュー／校区表） ═══════ -->
+<div id="menuBack"></div>
+<div id="menu" role="dialog" aria-label="メニュー">
+  <div class="menu-head" id="menuHead"></div>
+  <div class="menu-body" id="menuBody"></div>
+</div>
+
 <!-- ═══════ 履歴シート ═══════ -->
 <div id="sheetBack"></div>
 <div id="sheet">
@@ -643,7 +738,7 @@ input[type=range]{ flex:1; accent-color:var(--main); height:22px; min-width:0; }
 /* ════════════════════════════════════════════════════════════
    基本設定
    ════════════════════════════════════════════════════════════ */
-const APP_VERSION = '1.1.0';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
+const APP_VERSION = '1.2.0';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
 document.getElementById('verLabel').textContent = 'v' + APP_VERSION;
 
 // Yahoo!のClient ID（コンビニレーダーと同じもの）。住所の入力検索・地点の住所表示に使う
@@ -813,8 +908,11 @@ function routeOrigin(){
 /* ════════════════════════════════════════════════════════════
    国のデータ（data/ フォルダ）の読み込み
    ════════════════════════════════════════════════════════════ */
+// データは「?v=バージョン」付きで読む（バージョンが上がると自動で新しいデータになる）。
+// 「アプリを更新」で開き直したとき（URLに ?u= が付く）は、ブラウザに残った古いデータを使わず取り直す
+const FORCE_RELOAD = new URLSearchParams(location.search).has('u');
 async function fetchJson(url){
-  const res = await fetch(url, { cache: 'force-cache' });
+  const res = await fetch(url + '?v=' + APP_VERSION, { cache: FORCE_RELOAD ? 'reload' : 'default' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   return res.json();
 }
@@ -1450,7 +1548,7 @@ function kuCardHtml(ls, kuSchools, list){
   if (km && kuSchools.some(k => k.kmm)){
     const z = (km.ze.length ? km.ze.join('・') : '') + (km.ze.length && km.zj.length ? '・' : '') + (km.zj.length ? km.zj.join('・') : '');
     kmNote = '<div class="ku-note">🏫 熊本市の索引簿で判定：' + esc(km.place) +
-      (km.fromInput ? '（入力した住所）' : '（地図の位置から推定した住所）') +
+      (km.fromInput ? '（入力・選択した住所）' : '（地図の位置から推定した住所）') +
       (km.needBan ? '<br>番地で校区が分かれる町です。🔍で番地まで入れると確定します。' : '') +
       (km.banMissing ? '<br>この番地は索引簿に無いため、町の候補を出しています。' : '') +
       (z ? '<br>緩衝地区：希望すれば ' + esc(z) + ' も選べ' + (km.zMaybe ? 'る場合があります' : 'ます') : '') +
@@ -1871,8 +1969,7 @@ $('findClose').addEventListener('click', closeFind);
 $('findBack').addEventListener('click', closeFind);
 $('findForm').addEventListener('submit', e => { e.preventDefault(); runFind(); });
 
-// 履歴シート
-$('historyBtn').addEventListener('click', openSheet);
+// 履歴シート（メニューの「ルート表示の履歴」から開く）
 $('closeSheetBtn').addEventListener('click', closeSheet);
 $('sheetBack').addEventListener('click', closeSheet);
 $('clearAllBtn').addEventListener('click', () => {
@@ -1881,6 +1978,188 @@ $('clearAllBtn').addEventListener('click', () => {
     renderHist();
   }
 });
+
+/* ════════════════════════════════════════════════════════════
+   メニュー（右上の ☰）
+     ・校区を調べる … 熊本市の校区表（五十音の行ごと／町名で検索）
+     ・ルート表示の履歴
+     ・アプリを更新 … 公開中の最新版を確かめて、読み込み直す
+   ════════════════════════════════════════════════════════════ */
+function openMenu(){
+  showMenuHome();
+  $('menuBack').classList.add('show');
+  $('menu').classList.add('show');
+}
+function closeMenu(){
+  if (document.activeElement) document.activeElement.blur();
+  $('menuBack').classList.remove('show');
+  $('menu').classList.remove('show');
+}
+function showMenuHome(){
+  $('menuHead').innerHTML = '<h2>メニュー<small>v' + APP_VERSION + '</small></h2>' +
+    '<button class="menu-x" onclick="closeMenu()" aria-label="閉じる">×</button>';
+  $('menuBody').innerHTML =
+    '<button class="menu-item" onclick="showKuTable()"><span class="ic">🏫</span>' +
+      '<div><b>校区を調べる</b><span>熊本市の住所別の校区表（あ・か・さ・た・な…別／町名で検索）</span></div><span class="arrow">›</span></button>' +
+    '<button class="menu-item" onclick="closeMenu(); openSheet()"><span class="ic">🕘</span>' +
+      '<div><b>ルート表示の履歴</b><span>これまでに表示したルートをもう一度見る</span></div><span class="arrow">›</span></button>' +
+    '<button class="menu-item" onclick="updateApp()"><span class="ic">🔄</span>' +
+      '<div><b>アプリを更新</b><span>新しいバージョンを公開したあとに押すと、最新の状態で開き直します</span>' +
+      '<span id="updateMsg"></span></div></button>' +
+    '<div class="menu-credit">' + creditHtml() + '</div>';
+}
+
+/* ---- アプリを更新：公開中の index.html の APP_VERSION を読んで比べ、開き直す ---- */
+async function updateApp(){
+  const msg = $('updateMsg');
+  msg.textContent = '公開中のバージョンを確認しています…';
+  let latest = '';
+  try{
+    const res = await fetch(location.pathname + '?check=' + Date.now(), { cache: 'no-store' });
+    const html = await res.text();
+    const m = html.match(/const APP_VERSION = '([\d.]+)'/);
+    latest = m ? m[1] : '';
+  }catch(e){
+    msg.style.color = '#D93025';
+    msg.textContent = '確認できませんでした（通信できません）。電波の良い所で、もう一度押してください。';
+    return;
+  }
+  msg.textContent = latest && latest !== APP_VERSION
+    ? '新しい版 v' + latest + ' があります（いまは v' + APP_VERSION + '）。読み込み直します…'
+    : '最新版（v' + APP_VERSION + '）です。念のため読み込み直します…';
+  // ブラウザに保存された古いファイルを消してから開き直す（?u= を付けてデータも取り直す）
+  try{
+    if (window.caches){ const keys = await caches.keys(); await Promise.all(keys.map(k => caches.delete(k))); }
+    if (navigator.serviceWorker){ const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(r => r.unregister())); }
+  }catch(e){ /* 消せなくても開き直しは行う */ }
+  setTimeout(() => location.replace(location.pathname + '?u=' + Date.now()), 900);
+}
+
+/* ---- 校区表（熊本市の索引簿をそのまま表で見る） ---- */
+const KT_GYO = [['あ','あ'],['か','か'],['さ','さ'],['た','た'],['な','な'],['は','は'],['ま','ま'],['や','やらわ']];
+let ktGyo = 'あ';     // いま開いている行
+let ktShown = [];     // いま表に出している町（「地図で調べる」が番号で参照する）
+
+async function showKuTable(){
+  $('menuHead').innerHTML = '<button class="menu-back" onclick="showMenuHome()" aria-label="戻る">‹</button>' +
+    '<h2>校区を調べる<small>熊本市</small></h2>' +
+    '<button class="menu-x" onclick="closeMenu()" aria-label="閉じる">×</button>';
+  $('menuBody').innerHTML = '<div class="kt-empty">校区表を読み込んでいます…</div>';
+  await loadData();
+  if (!DATA.kmm || !DATA.kmm.list){
+    $('menuBody').innerHTML = '<div class="kt-empty">校区表（data/kumamoto_city.json）が読み込めませんでした。<br>' +
+      'data フォルダが公開されているか確認し、メニューの「アプリを更新」を試してください。</div>';
+    return;
+  }
+  $('menuBody').innerHTML =
+    '<div class="kt-top">' +
+      '<div class="kt-note">熊本市の索引簿（' + esc(DATA.kmm.ver || '') + '）の内容です。熊本市以外の市町村は、地図で地点を調べると校区が出ます。</div>' +
+      '<form id="ktForm" autocomplete="off" onsubmit="event.preventDefault(); ktSearch()">' +
+        '<input id="ktInput" type="search" enterkeyhint="search" placeholder="町名・読みで検索（例: 麻生田）" oninput="ktSearchLive()">' +
+        '<button id="ktGo" type="submit">検索</button></form>' +
+      '<div id="ktTabs">' + KT_GYO.map(([g, lb]) =>
+        '<button data-g="' + g + '"' + (lb.length > 1 ? ' class="sm"' : '') + ' onclick="ktTab(\'' + g + '\')">' + lb + '</button>').join('') + '</div>' +
+    '</div>' +
+    '<div id="ktList"></div>';
+  ktTab(ktGyo);
+}
+
+// 五十音の行のタブを押したとき
+function ktTab(g){
+  ktGyo = g;
+  if ($('ktInput')) $('ktInput').value = '';
+  document.querySelectorAll('#ktTabs button').forEach(b => b.classList.toggle('on', b.dataset.g === g));
+  const label = g === 'や' ? 'や・ら・わ' : g;
+  ktRender(DATA.kmm.list.filter(t => t.g === g), label + '行');
+}
+
+// ひらがな → カタカナ（読みで探せるように）
+function toKata(s){ return s.replace(/[\u3041-\u3096]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60)); }
+
+// 町名で検索（漢字でも読みでも。区や「熊本市」が入っていても探せる）
+function ktSearch(){
+  const raw = $('ktInput').value.trim();
+  if (!raw){ ktTab(ktGyo); return; }
+  let q = kmmNorm(raw).replace(/^.*?熊本県/, '').replace(/^.*?熊本市/, '');
+  let ward = '';
+  const wm = q.match(/^(中央区|東区|西区|南区|北区)/);
+  if (wm){ ward = wm[1]; q = q.slice(ward.length); }
+  q = q.replace(/(\d+)丁目.*$/, '$1').replace(/[-\d]+$/, m => m.split('-')[0]); // 「麻生田2丁目14-20」→「麻生田2」
+  const kq = toKata(q);                             // 読み（ひらがなで入れてもカタカナにして比べる）
+  const qBase = q.replace(/\d+$/, '');              // 数字（丁目）を除いた町名
+  const num = (q.match(/(\d+)$/) || [])[1];
+  document.querySelectorAll('#ktTabs button').forEach(b => b.classList.remove('on'));
+  const hits = DATA.kmm.list.filter(t => {
+    if (ward && t.w !== ward) return false;
+    const n = kmmNorm(t.n);
+    const nameHit = qBase && n.includes(qBase);
+    const kanaHit = /^[ァ-ヶー]+$/.test(kq) && kq.length >= 2 && t.k.startsWith(kq);
+    if (!nameHit && !kanaHit) return false;
+    if (num){ // 丁目の数字が入っていれば、その丁目を含む町だけ（「1～3丁目」のような書き方も見る）
+      const m = n.match(/(\d+(?:[～~・]\d+)*)丁目$/);
+      if (m){
+        const ok = m[1].split('・').some(p => {
+          const [a, b] = p.split(/[～~]/).map(Number);
+          return b ? (num >= a && num <= b) : Number(num) === a;
+        });
+        if (!ok) return false;
+      }
+    }
+    return true;
+  });
+  ktRender(hits, '「' + raw + '」の検索結果');
+}
+let ktTimer = null;
+function ktSearchLive(){ clearTimeout(ktTimer); ktTimer = setTimeout(() => { if ($('ktInput').value.trim().length >= 1) ktSearch(); else ktTab(ktGyo); }, 350); }
+
+// 町の一覧を表にして出す
+function ktRender(list, title){
+  ktShown = list;
+  const sc = (cat, name) => name ? '<span><span class="tag ' + cat + '">' + (cat === 'e' ? '小' : '中') + '</span>' + esc(name) + '</span>' : '';
+  const rng = r => (r.b ? '<em>住居番号</em>' + esc(r.b) : '') + (r.b && r.c ? '<br>' : '') + (r.c ? '<em>地番</em>' + esc(r.c) : '');
+  const html = list.map((t, i) =>
+    '<div class="kt-town">' +
+      '<div class="kt-th"><b>' + esc(t.n) + '</b><small>' + esc(t.w) + (t.k ? '・' + esc(t.k) : '') + '</small>' +
+        '<button class="kt-map" onclick="ktOnMap(' + i + ')">地図で調べる</button></div>' +
+      t.r.map(r =>
+        '<div class="kt-row">' +
+          '<div class="kt-rng">' + rng(r) + '</div>' +
+          '<div class="kt-sc">' + sc('e', r.e) + sc('j', r.j) + '</div>' +
+          (r.z || []).map(z => '<div class="kt-z"><b>緩衝地区</b>（希望すれば選べる）' +
+            ((z.b || z.c) ? '：' + esc([z.b, z.c].filter(Boolean).join('／')) : '') + ' → ' +
+            '<b>' + esc([z.e, z.j].filter(Boolean).join('・')) + '</b></div>').join('') +
+        '</div>').join('') +
+    '</div>').join('');
+  $('ktList').innerHTML = '<div class="kt-count">' + esc(title) + '：' + list.length + '件</div>' +
+    (list.length ? html : '<div class="kt-empty">見つかりませんでした。<br>町名の一部（例:「麻生田」）か、読み（例:「あそうだ」）で探してください。<br>熊本市以外の市町村は、地図で地点を調べると校区が出ます。</div>');
+  $('menuBody').scrollTop = 0;
+}
+
+// 「地図で調べる」：その町の場所を住所検索で探して、地図でまわりの学校と校区を出す
+async function ktOnMap(i){
+  const t = ktShown[i];
+  if (!t) return;
+  // 「荒尾1～3丁目」のような書き方は、最初の丁目で探す
+  const name = t.n.replace(/(\d+)(?:[～~・]\d+)+丁目$/, '$1丁目');
+  const addr = '熊本県熊本市' + t.w + name;
+  let hit = null;
+  try{
+    const r = YAHOO_CLIENT_ID ? await yolpAddressSearch(addr) : await nominatimSearch(addr);
+    hit = r.find(inPref);
+  }catch(e){ /* 下で案内 */ }
+  if (!hit){
+    showToast('この町の場所を地図で見つけられませんでした。地図を動かして「十字の位置で調べる」をお使いください');
+    return;
+  }
+  closeMenu();
+  const c = { lat: hit.lat, lng: hit.lng };
+  placePin(c);
+  clearRouteLayers();
+  searchArea(c, name, true, [t.w + name]);
+}
+
+$('menuBtn').addEventListener('click', openMenu);
+$('menuBack').addEventListener('click', closeMenu);
 
 /* ════════════════════════════════════════════════════════════
    起動
