@@ -18,7 +18,7 @@
   ■ できるファイル
     data/schools.json  … 学校 [{n:名前, k:種類, y:緯度, x:経度, a:住所, o:国立/公立/私立}]
                           k: e=小 j=中 g=義務教育 m=中等教育 h=高校 t=高専 c=短大 u=大学 s=特別支援
-    data/shogakku.json … 小学校区 GeoJSON（properties: n=学校名, c=市町村コード, y/x=学校の位置）
+    data/shogakku.json … 小学校区 GeoJSON（properties: n=学校名, c=市町村コード, m=市町村名, y/x=学校の位置）
     data/chugakku.json … 中学校区 GeoJSON（同上）
     data/meta.json     … 出典・年度・作成日
 
@@ -183,14 +183,24 @@ function readKu(files, schoolPts){
   const feats = fc.features.filter(x => x.geometry);
   const nk = pickKey(feats, v => NAME_RE.test(v));
   const ck = pickKey(feats, v => CODE_RE.test(v));
-  console.log('  校区', path.basename(polys), feats.length + '件', '名前=', nk, '市町村=', ck);
+  // 市町村名の項目（A27は「宇城市立」、A32は「天草市」のような値）。「立」を取って市町村名にする
+  const mk = pickKey(feats, v => /[市町村](立)?$/.test(v) && !NAME_RE.test(v) && !/\d/.test(v));
+  const ak = pickKey(feats, v => ADDR_RE.test(v) && !NAME_RE.test(v));
+  console.log('  校区', path.basename(polys), feats.length + '件', '名前=', nk, '市町村コード=', ck, '市町村名=', mk);
   const all = pts.concat(schoolPts);
   let matched = 0;
   const out = feats.map(x => {
     const p = x.properties;
     const n = String(p[nk] || '').trim();
     const c = ck ? String(p[ck]) : '';
-    const props = { n, c };
+    // 市町村名（m）。「〇〇組合立」のように市町村名にならないときは、所在地の住所から取る
+    let m = mk ? String(p[mk] || '').replace(/立$/, '') : '';
+    if (!m || /組合|及び/.test(m)){
+      const am = String(ak ? p[ak] : '').match(/^(?:.+?郡)?(.+?[市町村])/);
+      m = am ? am[1] : m;
+    }
+    m = m.replace(/^.+?郡/, '');   // 「下益城郡美里町」→「美里町」（小学校区と表記をそろえる）
+    const props = { n, c, m };
     // 校区の学校の位置：同じ名前の学校のうち、校区の中心にいちばん近いもの
     const key = normName(n), mid = centroid(x.geometry);
     // まず同じ市町村の中で探し、無ければ市町村を問わず探す（市町村コードが食い違うデータがあるため）
