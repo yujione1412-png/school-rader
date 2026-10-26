@@ -2,7 +2,7 @@
 <!--
 ═══════════════════════════════════════════════════════════════════════════
   スクールレーダー （school-radar）
-  現在バージョン: v1.4.1
+  現在バージョン: v1.4.2
 ═══════════════════════════════════════════════════════════════════════════
 
 ■ このファイルでできること
@@ -146,6 +146,9 @@
           ・画像の地図の学校ピンを、アプリと同じ「小」「中」マーク＋学校名（小さい文字）に変更
           ・画像に小学校・中学校までの徒歩ルートを線で描き、結果欄に距離と徒歩時間を表示（直線距離の表示は削除）
           ・「結果を画像で保存」を押すと、先に画像のプレビューを表示し、そこから保存・共有できるように変更
+  v1.4.2  結果画像の地図を調整
+          ・画像の地図の拡大率を、画像を作る時点のアプリの地図の拡大率に合わせるよう変更（固定だったものを可変に）
+          ・画像の地図に出す学校を、校区の小学校・中学校だけに変更（その他の学校は出さない）
 
 ■ 使っている無料サービス（すべてカード登録不要）
   ・Leaflet 1.9.4 …………… 地図の表示（CDN: cdnjs）
@@ -850,7 +853,7 @@ input[type=range]{ flex:1; accent-color:var(--main); height:22px; min-width:0; }
 /* ════════════════════════════════════════════════════════════
    基本設定
    ════════════════════════════════════════════════════════════ */
-const APP_VERSION = '1.4.1';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
+const APP_VERSION = '1.4.2';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
 document.getElementById('verLabel').textContent = 'v' + APP_VERSION;
 
 // Yahoo!のClient ID（コンビニレーダーと同じもの）。住所の入力検索・地点の住所表示に使う
@@ -2539,7 +2542,7 @@ $('menuBack').addEventListener('click', closeMenu);
    地図のタイルと校区の範囲をキャンバスに描き直して、1枚の画像にする。
    通信できない等で地図が作れないときは、範囲と結果だけの画像に切り替える。
    ════════════════════════════════════════════════════════════ */
-const IMG_W = 1080, IMG_H = 1440, IMG_MAP_Y = 190, IMG_MAP_H = 720, IMG_ZOOM = 15;
+const IMG_W = 1080, IMG_H = 1440, IMG_MAP_Y = 190, IMG_MAP_H = 720;
 
 // 緯度経度 → 世界ピクセル座標（地図タイルの計算方法）
 function worldPx(lat, lng, z){
@@ -2573,14 +2576,6 @@ function drawFitText(ctx, text, x, y, maxW, size, color, bold){
     text += '…';
   }
   ctx.fillText(text, x, y);
-}
-
-// 世界ピクセル座標 → 緯度経度（worldPx の逆）
-function invWorldPx(x, y, z){
-  const n = Math.pow(2, z) * 256;
-  const lng = x / n * 360 - 180;
-  const latR = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n)));
-  return { lat: latR * 180 / Math.PI, lng };
 }
 
 // 画像に入れるルート（小学校・中学校ごと）。buildResultImage の前に fetchImgRoutes で用意する
@@ -2618,8 +2613,8 @@ async function buildResultImage(withTiles){
   ctx.fillStyle = '#8A93A3'; ctx.font = '26px "Hiragino Sans","Noto Sans JP",sans-serif';
   ctx.fillText(now.getFullYear() + '年' + (now.getMonth() + 1) + '月' + now.getDate() + '日 調べ', 48, 172);
 
-  // 地図の部分
-  const z = IMG_ZOOM;
+  // 地図の部分（拡大率は、画像を作る時点のアプリの地図に合わせる）
+  const z = Math.max(10, Math.min(19, Math.round(map.getZoom())));
   const center = worldPx(d.c.lat, d.c.lng, z);
   const tl = { x: center.x - IMG_W / 2, y: center.y - IMG_MAP_H / 2 };
   ctx.save();
@@ -2690,26 +2685,19 @@ async function buildResultImage(withTiles){
       ctx.fillStyle = '#26314A'; ctx.fillText(name, tx, ty);
     }
   };
-  const drawnAt = []; // ピンを描いた場所（校区の学校と二重に描かないため）
-  if (DATA.schools){
-    const tlLL = invWorldPx(tl.x, tl.y, z), brLL = invWorldPx(tl.x + IMG_W, tl.y + IMG_MAP_H, z);
-    DATA.schools.forEach(s => {
-      if (s.y < brLL.lat || s.y > tlLL.lat || s.x < tlLL.lng || s.x > brLL.lng) return;
-      const kd = KINDS[s.k] || KINDS.s;
-      const isKu = [d.e, d.j].flat().some(k => k.pos && normName(k.name) === normName(s.n) && distM(k.pos, { lat: s.y, lng: s.x }) < 300);
-      drawPin(proj(s.y, s.x), isKu ? 25 : 16, kd.mark, CAT_COLOR[kd.c[0]],
-        s.n.replace(/^.{1,6}?[市町村]立/, ''), isKu);
-      drawnAt.push({ lat: s.y, lng: s.x });
-    });
-  }
-  // 校区の学校が学校一覧に無い場合（位置が校区データ由来のとき）は、その場所にピンを足す
-  [['e', d.e, '小'], ['j', d.j, '中']].forEach(([cat, items, mark]) => {
+  // 校区の小学校・中学校だけを描く（それ以外の学校は画像には出さない）
+  const pinDone = {};
+  [['e', d.e], ['j', d.j]].forEach(([cat, items]) => {
     items.forEach(k => {
       if (!k.pos) return;
-      if (drawnAt.some(p => distM(p, k.pos) < 50)) return;
-      drawPin(proj(k.pos.lat, k.pos.lng), 25, mark, CAT_COLOR[cat],
+      const key = k.pos.lat.toFixed(5) + ',' + k.pos.lng.toFixed(5);
+      if (pinDone[key]) return; // 小・中両方に出てくる学校は1回だけ
+      pinDone[key] = true;
+      // 小・中両方の校区になっている学校（義務教育学校など）は「小中」と出す
+      const other = (cat === 'e' ? d.j : d.e);
+      const both = other.some(o => o.pos && normName(o.name) === normName(k.name) && distM(o.pos, k.pos) < 300);
+      drawPin(proj(k.pos.lat, k.pos.lng), 25, both ? '小中' : (cat === 'e' ? '小' : '中'), CAT_COLOR[cat],
         k.name.replace(/^.{1,6}?[市町村]立/, ''), true);
-      drawnAt.push(k.pos);
     });
   });
   const cp = proj(d.c.lat, d.c.lng);
