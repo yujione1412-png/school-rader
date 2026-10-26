@@ -2,7 +2,7 @@
 <!--
 ═══════════════════════════════════════════════════════════════════════════
   スクールレーダー （school-radar）
-  現在バージョン: v1.4.2
+  現在バージョン: v1.4.3
 ═══════════════════════════════════════════════════════════════════════════
 
 ■ このファイルでできること
@@ -149,6 +149,11 @@
   v1.4.2  結果画像の地図を調整
           ・画像の地図の拡大率を、画像を作る時点のアプリの地図の拡大率に合わせるよう変更（固定だったものを可変に）
           ・画像の地図に出す学校を、校区の小学校・中学校だけに変更（その他の学校は出さない）
+  v1.4.3  画像の地図の合わせ方と、結果カードの表示を改善
+          ・画像の地図の中心を「調べた地点」から「そのとき画面に表示している地図の中心」に変更し、
+            広さも画面で見えている範囲と一致するよう補正（拡大率そのままだと画像だけ引きになっていた）
+          ・校区カードに「▽ たたむ」ボタンを追加。たたむと住所の行だけになり、地図を広く見て操作できる
+            （もう一度押すと広がる。新しい検索をすると自動で広がった状態に戻る）
 
 ■ 使っている無料サービス（すべてカード登録不要）
   ・Leaflet 1.9.4 …………… 地図の表示（CDN: cdnjs）
@@ -473,6 +478,11 @@ button{ font-family:inherit; cursor:pointer; border:none; background:none; color
   display:none;
 }
 #statusCard.show{ display:block; }
+#statusCard.folded{ max-height:58px; overflow:hidden; } /* たたんだとき：先頭の行だけ見せる */
+.ku-head .foldBtn{
+  flex:none; background:#ECEFF4; border-radius:999px;
+  width:30px; height:30px; font-size:12px; color:#5B6578; font-weight:700;
+}
 #statusCard .src{ font-size:11px; color:#707A8C; margin-top:3px; }
 #statusCard .act{ /* カード内の小ボタン共通 */
   display:inline-block; margin:6px 6px 0 0;
@@ -853,7 +863,7 @@ input[type=range]{ flex:1; accent-color:var(--main); height:22px; min-width:0; }
 /* ════════════════════════════════════════════════════════════
    基本設定
    ════════════════════════════════════════════════════════════ */
-const APP_VERSION = '1.4.2';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
+const APP_VERSION = '1.4.3';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
 document.getElementById('verLabel').textContent = 'v' + APP_VERSION;
 
 // Yahoo!のClient ID（コンビニレーダーと同じもの）。住所の入力検索・地点の住所表示に使う
@@ -943,10 +953,19 @@ const $ = id => document.getElementById(id);
 // 状況カードに日本語で状況を出す。空文字ならカードごと隠す
 function setStatus(html){
   const el = $('statusCard');
-  if (!html){ el.classList.remove('show'); el.innerHTML = ''; placeFloating(); return; }
+  if (!html){ el.classList.remove('show'); el.classList.remove('folded'); el.innerHTML = ''; placeFloating(); return; }
   el.innerHTML = html;
   el.classList.add('show');
+  el.classList.remove('folded'); // 新しい内容では、たたんだ状態を解除する
   placeFloating(); // カードの高さが変わるので位置を直す
+}
+
+// 結果カードをたたむ／広げる（地図を広く見て操作したいとき用）
+function toggleCardFold(btn){
+  const card = $('statusCard');
+  const folded = card.classList.toggle('folded');
+  if (btn) btn.textContent = folded ? '△' : '▽';
+  placeFloating();
 }
 
 // 状況カード・◉・校区線ボタンを、操作パネルのすぐ上に積む
@@ -1745,6 +1764,7 @@ function kuCardHtml(ls, kuSchools, list){
     '<button class="act" onclick="shareResult()">↗ 共有する</button></div>';
 
   return '<div class="ku-head"><span class="addr">📍 ' + esc(ls.addr || ls.label + 'のあたり') + '</span>' +
+      '<button class="foldBtn" onclick="toggleCardFold(this)" title="結果をたたむ／広げる">▽</button>' +
       '<button class="rt-x" style="width:26px;height:26px;font-size:13px" onclick="clearResults()">×</button></div>' +
     rows +
     '<div class="ku-foot">' + foot + '</div>' + warnHtml + kmNote +
@@ -2613,30 +2633,39 @@ async function buildResultImage(withTiles){
   ctx.fillStyle = '#8A93A3'; ctx.font = '26px "Hiragino Sans","Noto Sans JP",sans-serif';
   ctx.fillText(now.getFullYear() + '年' + (now.getMonth() + 1) + '月' + now.getDate() + '日 調べ', 48, 172);
 
-  // 地図の部分（拡大率は、画像を作る時点のアプリの地図に合わせる）
-  const z = Math.max(10, Math.min(19, Math.round(map.getZoom())));
-  const center = worldPx(d.c.lat, d.c.lng, z);
+  // 地図の部分：中心と広さは、画像を作る時点のアプリの地図表示に合わせる。
+  // 拡大率はそのまま使わず「画面で見えている範囲」と同じ広さになるよう補正する
+  // （画像の方が横に広い分だけ拡大率を上げないと、画像だけ引きの地図になってしまう）。
+  const mc = map.getCenter();
+  const msize = map.getSize();
+  const z = Math.max(10, Math.min(20, map.getZoom() + Math.log2(IMG_W / ((msize && msize.x) || 390))));
+  const center = worldPx(mc.lat, mc.lng, z);
   const tl = { x: center.x - IMG_W / 2, y: center.y - IMG_MAP_H / 2 };
   ctx.save();
   ctx.beginPath(); ctx.rect(0, IMG_MAP_Y, IMG_W, IMG_MAP_H); ctx.clip();
   ctx.fillStyle = '#E9EDF2'; ctx.fillRect(0, IMG_MAP_Y, IMG_W, IMG_MAP_H);
   if (withTiles){
-    const x0 = Math.floor(tl.x / 256), x1 = Math.floor((tl.x + IMG_W) / 256);
-    const y0 = Math.floor(tl.y / 256), y1 = Math.floor((tl.y + IMG_MAP_H) / 256);
-    const jobs = [];
-    for (let tx = x0; tx <= x1; tx++) for (let ty = y0; ty <= y1; ty++){
-      jobs.push((async () => {
-        const img = await loadImg('https://tile.openstreetmap.org/' + z + '/' + tx + '/' + ty + '.png');
-        if (img) ctx.drawImage(img, tx * 256 - tl.x, IMG_MAP_Y + ty * 256 - tl.y);
-        if (hzMode){ // ハザード表示中なら、それも画像に入れる
-          for (const id of HAZARD[hzMode].layers){
-            const h = await loadImg('https://disaportaldata.gsi.go.jp/raster/' + id + '/' + z + '/' + tx + '/' + ty + '.png');
-            if (h){ ctx.globalAlpha = .55; ctx.drawImage(h, tx * 256 - tl.x, IMG_MAP_Y + ty * 256 - tl.y); ctx.globalAlpha = 1; }
-          }
-        }
-      })());
+    // 地図タイルは整数の拡大率でしか取れないので、近い拡大率のタイルを拡大・縮小して描く
+    const drawTiles = async (urlFor, maxNative, alpha) => {
+      const zt = Math.max(0, Math.min(maxNative, Math.round(z)));
+      const ts = 256 * Math.pow(2, z - zt); // 1タイルの描画サイズ
+      const x0 = Math.floor(tl.x / ts), x1 = Math.floor((tl.x + IMG_W) / ts);
+      const y0 = Math.floor(tl.y / ts), y1 = Math.floor((tl.y + IMG_MAP_H) / ts);
+      const jobs = [];
+      for (let tx = x0; tx <= x1; tx++) for (let ty = y0; ty <= y1; ty++){
+        jobs.push((async () => {
+          const img = await loadImg(urlFor(zt, tx, ty));
+          if (img){ ctx.globalAlpha = alpha; ctx.drawImage(img, tx * ts - tl.x, IMG_MAP_Y + ty * ts - tl.y, ts, ts); ctx.globalAlpha = 1; }
+        })());
+      }
+      await Promise.all(jobs);
+    };
+    await drawTiles((zt, tx, ty) => 'https://tile.openstreetmap.org/' + zt + '/' + tx + '/' + ty + '.png', 19, 1);
+    if (hzMode){ // ハザード表示中なら、それも画像に入れる
+      for (const id of HAZARD[hzMode].layers){
+        await drawTiles((zt, tx, ty) => 'https://disaportaldata.gsi.go.jp/raster/' + id + '/' + zt + '/' + tx + '/' + ty + '.png', 17, .55);
+      }
     }
-    await Promise.all(jobs);
   }
   const proj = (lat, lng) => { const p = worldPx(lat, lng, z); return [p.x - tl.x, IMG_MAP_Y + p.y - tl.y]; };
   // 校区の範囲を色で描く
