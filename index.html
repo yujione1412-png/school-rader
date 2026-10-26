@@ -2,7 +2,7 @@
 <!--
 ═══════════════════════════════════════════════════════════════════════════
   スクールレーダー （school-radar）
-  現在バージョン: v1.4.0
+  現在バージョン: v1.4.1
 ═══════════════════════════════════════════════════════════════════════════
 
 ■ このファイルでできること
@@ -17,7 +17,8 @@
   ・「校区線」ボタンで、熊本県内の小学校区・中学校区の境目をすべて表示できる
   ・校区の境界まで150m以内の地点では、校区カードに「境界まで約○m・向こう側は○○校区」の警告を出す（v1.4.0）
   ・「ハザード」ボタンで、国土地理院のハザードマップ（洪水／土砂災害／津波・高潮）を地図に重ねられる（v1.4.0）
-  ・校区カードのボタンから、結果（地図＋校区＋学校までの距離）を1枚の画像にして保存・共有できる（v1.4.0）
+  ・校区カードのボタンから、結果（地図＋校区＋学校までのルートと徒歩時間）を1枚の画像にして保存・共有できる（v1.4.0）
+    画像は保存前にプレビューで確認できる。地図上の学校はアプリと同じ「小」「中」マーク＋学校名で描く（v1.4.1）
   ・ルートを表示した履歴を端末内（localStorage）に残し、あとから再表示できる
   ・右上の ☰ でメニューを開ける（地図の上にウインドウで出る）
       校区を調べる … 熊本市の住所別の校区表。あ・か・さ・た・な・は・ま・やらわ の行ごとに見られ、
@@ -141,6 +142,10 @@
           ・「ハザード」ボタンで国土地理院のハザードマップを重ね表示（洪水=浸水想定の最大規模／土砂災害=警戒区域／津波・高潮）
           ・校区カードに「結果を画像で保存」「共有する」ボタンを追加（地図・校区・学校までの距離入りの画像を作成）
           ・見やすさの調整：校区カードの学校名を大きく（13.5→15.5px）、ボタン類のタップ領域と文字を拡大、補助文字のコントラストを改善
+  v1.4.1  結果画像の内容と保存の流れを改善
+          ・画像の地図の学校ピンを、アプリと同じ「小」「中」マーク＋学校名（小さい文字）に変更
+          ・画像に小学校・中学校までの徒歩ルートを線で描き、結果欄に距離と徒歩時間を表示（直線距離の表示は削除）
+          ・「結果を画像で保存」を押すと、先に画像のプレビューを表示し、そこから保存・共有できるように変更
 
 ■ 使っている無料サービス（すべてカード登録不要）
   ・Leaflet 1.9.4 …………… 地図の表示（CDN: cdnjs）
@@ -528,6 +533,40 @@ button{ font-family:inherit; cursor:pointer; border:none; background:none; color
 .ku-actions{ display:flex; gap:8px; margin-top:8px; }
 .ku-actions .act{ margin:0 !important; flex:1; text-align:center; }
 
+/* ---- 結果画像のプレビュー（保存前に表示） ---- */
+#imgBack{
+  position:fixed; inset:0; background:rgba(20,26,40,.55);
+  z-index:120; opacity:0; pointer-events:none; transition:opacity .2s;
+}
+#imgBack.show{ opacity:1; pointer-events:auto; }
+#imgSheet{
+  position:fixed; z-index:121; left:10px; right:10px;
+  top:calc(10px + env(safe-area-inset-top)); bottom:calc(10px + env(safe-area-inset-bottom));
+  max-width:560px; margin:0 auto;
+  background:#fff; border-radius:20px; box-shadow:var(--shadow);
+  display:flex; flex-direction:column; overflow:hidden;
+  opacity:0; transform:scale(.97); pointer-events:none; transition:opacity .18s, transform .18s;
+}
+#imgSheet.show{ opacity:1; transform:none; pointer-events:auto; }
+.img-head{ display:flex; align-items:center; padding:14px 14px 10px; border-bottom:1px solid #E3E6EC; }
+.img-head b{ flex:1; font-family:"Zen Maru Gothic",sans-serif; font-size:16px; }
+#imgClose{
+  background:#ECEFF4; border-radius:999px; width:32px; height:32px;
+  font-size:15px; color:#5B6578; font-weight:700; flex:none;
+}
+.img-body{
+  flex:1; overflow:auto; background:#EEF1F5;
+  display:flex; align-items:flex-start; justify-content:center; padding:10px;
+}
+#imgPreview{ max-width:100%; height:auto; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,.18); }
+.img-actions{ display:flex; gap:8px; padding:12px 14px 4px; }
+.img-actions button{
+  flex:1; border-radius:12px; padding:13px;
+  font-size:15px; font-weight:700; background:#ECEFF4; color:var(--ink);
+}
+.img-actions button.primary{ background:var(--main); color:#fff; }
+.img-note{ font-size:11.5px; color:#8A93A3; text-align:center; padding:6px 14px 12px; }
+
 /* ---- 下部：操作パネル（コンパクトな3段） ---- */
 #panel{
   position:fixed; z-index:20; left:12px; right:12px;
@@ -795,11 +834,23 @@ input[type=range]{ flex:1; accent-color:var(--main); height:22px; min-width:0; }
   <div class="sheet-credit" id="credit"></div>
 </div>
 
+<!-- ═══════ 結果画像のプレビュー（保存する前に表示する） ═══════ -->
+<div id="imgBack"></div>
+<div id="imgSheet">
+  <div class="img-head"><b>結果の画像</b><button id="imgClose" aria-label="閉じる">×</button></div>
+  <div class="img-body"><img id="imgPreview" alt="校区チェック結果の画像"></div>
+  <div class="img-actions">
+    <button id="imgSaveBtn" class="primary">保存する</button>
+    <button id="imgShareBtn">共有する</button>
+  </div>
+  <p class="img-note">端末によっては、画像を長押ししても保存できます。</p>
+</div>
+
 <script>
 /* ════════════════════════════════════════════════════════════
    基本設定
    ════════════════════════════════════════════════════════════ */
-const APP_VERSION = '1.4.0';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
+const APP_VERSION = '1.4.1';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
 document.getElementById('verLabel').textContent = 'v' + APP_VERSION;
 
 // Yahoo!のClient ID（コンビニレーダーと同じもの）。住所の入力検索・地点の住所表示に使う
@@ -1980,6 +2031,10 @@ $('searchHereBtn').addEventListener('click', () => doSearch('map'));
 $('meBtn').addEventListener('click', () => locate(true));
 $('kuBtn').addEventListener('click', toggleKuLines);
 $('hzBtn').addEventListener('click', toggleHazard);
+$('imgClose').addEventListener('click', closeImgPreview);
+$('imgBack').addEventListener('click', closeImgPreview);
+$('imgSaveBtn').addEventListener('click', downloadImg);
+$('imgShareBtn').addEventListener('click', shareImg);
 
 // 学校の種類のチップ：押すたびに表示／非表示（再検索はせず、描き直すだけ）
 $('cats').querySelectorAll('button').forEach(btn => {
@@ -2520,6 +2575,32 @@ function drawFitText(ctx, text, x, y, maxW, size, color, bold){
   ctx.fillText(text, x, y);
 }
 
+// 世界ピクセル座標 → 緯度経度（worldPx の逆）
+function invWorldPx(x, y, z){
+  const n = Math.pow(2, z) * 256;
+  const lng = x / n * 360 - 180;
+  const latR = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n)));
+  return { lat: latR * 180 / Math.PI, lng };
+}
+
+// 画像に入れるルート（小学校・中学校ごと）。buildResultImage の前に fetchImgRoutes で用意する
+let imgRoutes = { e: null, j: null };
+// 小学校・中学校（校区が無い場所では参考の最寄り校）までの徒歩ルートを取る
+async function fetchImgRoutes(){
+  imgRoutes = { e: null, j: null };
+  const d = lastCardData;
+  if (!d) return;
+  const jobs = [];
+  [['e', d.e.find(k => k.pos), d.refE], ['j', d.j.find(k => k.pos), d.refJ]].forEach(([cat, item, ref]) => {
+    const to = item ? item.pos : (ref ? { lat: ref.y, lng: ref.x } : null);
+    if (!to) return;
+    jobs.push(osrmRoute(d.c, to, 'foot').then(r => {
+      imgRoutes[cat] = { dist: r.distance, dur: r.duration, coords: r.geometry.coordinates };
+    }).catch(() => { /* 取れなければルートなしで画像を作る */ }));
+  });
+  await Promise.all(jobs);
+}
+
 // 結果画像を組み立てる。withTiles=false のときは地図タイルを描かない
 async function buildResultImage(withTiles){
   const d = lastCardData;
@@ -2579,18 +2660,58 @@ async function buildResultImage(withTiles){
   };
   (d.ku.j || []).forEach(f => drawKuImg(f, CAT_COLOR.j, .06));
   (d.ku.e || []).forEach(f => drawKuImg(f, CAT_COLOR.e, .12));
-  // 校区の学校（★）と、調べた地点（中心の丸）
-  const star = (pos, color) => {
-    if (!pos) return;
-    const xy = proj(pos.lat, pos.lng);
-    ctx.beginPath(); ctx.arc(xy[0], xy[1], 17, 0, Math.PI * 2);
-    ctx.fillStyle = color; ctx.fill();
-    ctx.lineWidth = 4; ctx.strokeStyle = '#fff'; ctx.stroke();
-    ctx.fillStyle = '#fff'; ctx.font = '700 22px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('★', xy[0], xy[1] + 8); ctx.textAlign = 'left';
+  // 学校までのルート（徒歩）を線で描く（小学校区=オレンジ、中学校区=緑）
+  const drawRouteImg = (rt, color) => {
+    if (!rt) return;
+    ctx.beginPath();
+    rt.coords.forEach(([lng, lat], i) => {
+      const xy = proj(lat, lng);
+      if (i === 0) ctx.moveTo(xy[0], xy[1]); else ctx.lineTo(xy[0], xy[1]);
+    });
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 10; ctx.globalAlpha = .85; ctx.stroke();
+    ctx.strokeStyle = color; ctx.lineWidth = 6; ctx.globalAlpha = 1; ctx.stroke();
   };
-  d.e.forEach(k => star(k.pos, CAT_COLOR.e));
-  d.j.forEach(k => star(k.pos, CAT_COLOR.j));
+  drawRouteImg(imgRoutes.e, CAT_COLOR.e);
+  drawRouteImg(imgRoutes.j, CAT_COLOR.j);
+  // 学校のピン（アプリと同じ「小」「中」などの文字入りマーク）と学校名（小さい文字）
+  const drawPin = (xy, r, mark, color, name, big) => {
+    ctx.beginPath(); ctx.arc(xy[0], xy[1], r, 0, Math.PI * 2);
+    ctx.fillStyle = color; ctx.fill();
+    ctx.lineWidth = big ? 5 : 3; ctx.strokeStyle = '#fff'; ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
+    ctx.font = '700 ' + Math.round(mark.length > 1 ? r * 0.85 : r * 1.05) + 'px "Hiragino Sans","Noto Sans JP",sans-serif';
+    ctx.fillText(mark, xy[0], xy[1] + r * 0.36);
+    ctx.textAlign = 'left';
+    if (name){
+      ctx.font = (big ? '700 ' : '') + (big ? 25 : 20) + 'px "Hiragino Sans","Noto Sans JP",sans-serif';
+      const tx = xy[0] + r + 7, ty = xy[1] + (big ? 9 : 7);
+      ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(255,255,255,.92)';
+      ctx.strokeText(name, tx, ty);
+      ctx.fillStyle = '#26314A'; ctx.fillText(name, tx, ty);
+    }
+  };
+  const drawnAt = []; // ピンを描いた場所（校区の学校と二重に描かないため）
+  if (DATA.schools){
+    const tlLL = invWorldPx(tl.x, tl.y, z), brLL = invWorldPx(tl.x + IMG_W, tl.y + IMG_MAP_H, z);
+    DATA.schools.forEach(s => {
+      if (s.y < brLL.lat || s.y > tlLL.lat || s.x < tlLL.lng || s.x > brLL.lng) return;
+      const kd = KINDS[s.k] || KINDS.s;
+      const isKu = [d.e, d.j].flat().some(k => k.pos && normName(k.name) === normName(s.n) && distM(k.pos, { lat: s.y, lng: s.x }) < 300);
+      drawPin(proj(s.y, s.x), isKu ? 25 : 16, kd.mark, CAT_COLOR[kd.c[0]],
+        s.n.replace(/^.{1,6}?[市町村]立/, ''), isKu);
+      drawnAt.push({ lat: s.y, lng: s.x });
+    });
+  }
+  // 校区の学校が学校一覧に無い場合（位置が校区データ由来のとき）は、その場所にピンを足す
+  [['e', d.e, '小'], ['j', d.j, '中']].forEach(([cat, items, mark]) => {
+    items.forEach(k => {
+      if (!k.pos) return;
+      if (drawnAt.some(p => distM(p, k.pos) < 50)) return;
+      drawPin(proj(k.pos.lat, k.pos.lng), 25, mark, CAT_COLOR[cat],
+        k.name.replace(/^.{1,6}?[市町村]立/, ''), true);
+      drawnAt.push(k.pos);
+    });
+  });
   const cp = proj(d.c.lat, d.c.lng);
   ctx.beginPath(); ctx.arc(cp[0], cp[1], 15, 0, Math.PI * 2);
   ctx.fillStyle = '#2B59A8'; ctx.fill();
@@ -2608,14 +2729,16 @@ async function buildResultImage(withTiles){
     if (items.length){
       const nm = items.map(k => (k.cand ? '候補 ' : '') + k.name.replace(/^.{1,6}?[市町村]立/, '') + '区').join('・');
       drawFitText(ctx, nm, 126, y, IMG_W - 174, 50, '#1D2739', true);
-      if (items[0].pos){
-        ctx.fillStyle = '#66707E'; ctx.font = '30px "Hiragino Sans","Noto Sans JP",sans-serif';
-        ctx.fillText('学校まで直線 約 ' + fmtDist(distM(d.c, items[0].pos)), 126, y + 44);
-      }
+      const rt = imgRoutes[cat];
+      ctx.fillStyle = '#66707E'; ctx.font = '30px "Hiragino Sans","Noto Sans JP",sans-serif';
+      if (rt) ctx.fillText('徒歩 約 ' + fmtDur(rt.dur) + '・約 ' + fmtDist(rt.dist), 126, y + 44);
+      else if (items[0].pos) ctx.fillText('ルートを取得できませんでした', 126, y + 44);
     }else if (ref){
       drawFitText(ctx, '参考・最寄り ' + ref.n, 126, y, IMG_W - 174, 44, '#1D2739', true);
+      const rt = imgRoutes[cat];
       ctx.fillStyle = '#66707E'; ctx.font = '30px "Hiragino Sans","Noto Sans JP",sans-serif';
-      ctx.fillText('学校まで直線 約 ' + fmtDist(distM(d.c, { lat: ref.y, lng: ref.x })) + '（校区の学校とは限りません）', 126, y + 44);
+      if (rt) ctx.fillText('徒歩 約 ' + fmtDur(rt.dur) + '・約 ' + fmtDist(rt.dist) + '（校区の学校とは限りません）', 126, y + 44);
+      else ctx.fillText('ルートを取得できませんでした', 126, y + 44);
     }else{
       ctx.fillStyle = '#66707E'; ctx.font = '40px "Hiragino Sans","Noto Sans JP",sans-serif';
       ctx.fillText(cat === 'e' ? '小学校区のデータがありません' : '中学校区のデータがありません', 126, y);
@@ -2645,18 +2768,51 @@ async function getResultBlob(){
   if (!blob) blob = await canvasBlob(await buildResultImage(false)); // 地図なしで作り直す
   return blob;
 }
-// 「結果を画像で保存」ボタン
+// 「結果を画像で保存」ボタン：画像を作って、まずプレビューで表示する（v1.4.1）
+let imgBlob = null, imgUrl = '';
 async function saveResultImage(){
   if (!lastCardData){ showToast('まず地点を調べてください'); return; }
-  showToast('画像を作っています…', true);
+  showToast('画像を作っています…（ルート計算のため少し待ちます）', true);
+  await fetchImgRoutes();
   const blob = await getResultBlob();
   if (!blob){ showToast('画像を作れませんでした'); return; }
+  imgBlob = blob;
+  if (imgUrl) URL.revokeObjectURL(imgUrl);
+  imgUrl = URL.createObjectURL(blob);
+  $('imgPreview').src = imgUrl;
+  $('imgBack').classList.add('show');
+  $('imgSheet').classList.add('show');
+}
+function closeImgPreview(){
+  $('imgBack').classList.remove('show');
+  $('imgSheet').classList.remove('show');
+}
+// プレビューの「保存する」
+function downloadImg(){
+  if (!imgBlob) return;
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  a.href = imgUrl;
   a.download = 'school-radar-' + new Date().toISOString().slice(0, 10) + '.png';
   document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   showToast('画像を保存しました', true);
+}
+// プレビューの「共有する」（画像で共有できれば画像、だめなら文章）
+async function shareImg(){
+  if (!imgBlob) return;
+  try{
+    const file = new File([imgBlob], 'school-radar.png', { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })){
+      await navigator.share({ files: [file], title: 'スクールレーダーの結果' });
+      return;
+    }
+  }catch(e){
+    if (e && e.name === 'AbortError') return; // 共有をやめただけ
+  }
+  if (navigator.share){
+    try{ await navigator.share({ title: 'スクールレーダーの結果', text: resultShareText(), url: location.href }); }catch(e){ /* キャンセル等は無視 */ }
+  }else{
+    showToast('この端末では共有できません。「保存する」で画像を保存してください');
+  }
 }
 // 共有する文章（画像で共有できない端末向け）
 function resultShareText(){
@@ -2671,6 +2827,8 @@ function resultShareText(){
 // 「共有する」ボタン（画像で共有できれば画像、だめなら文章）
 async function shareResult(){
   if (!lastCardData){ showToast('まず地点を調べてください'); return; }
+  showToast('画像を作っています…（ルート計算のため少し待ちます）', true);
+  await fetchImgRoutes();
   try{
     const blob = await getResultBlob();
     if (blob){
