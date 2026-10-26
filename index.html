@@ -2,7 +2,7 @@
 <!--
 ═══════════════════════════════════════════════════════════════════════════
   スクールレーダー （school-radar）
-  現在バージョン: v1.3.0
+  現在バージョン: v1.4.0
 ═══════════════════════════════════════════════════════════════════════════
 
 ■ このファイルでできること
@@ -15,6 +15,9 @@
   ・地点の決め方は4つ: 現在地／画面中心の十字／地図の長押し／🔍で住所・施設名・学校名を入力
   ・学校までのルート（徒歩／車）をアプリ内に表示する。Googleマップでも開ける（ナビは自動開始しない）
   ・「校区線」ボタンで、熊本県内の小学校区・中学校区の境目をすべて表示できる
+  ・校区の境界まで150m以内の地点では、校区カードに「境界まで約○m・向こう側は○○校区」の警告を出す（v1.4.0）
+  ・「ハザード」ボタンで、国土地理院のハザードマップ（洪水／土砂災害／津波・高潮）を地図に重ねられる（v1.4.0）
+  ・校区カードのボタンから、結果（地図＋校区＋学校までの距離）を1枚の画像にして保存・共有できる（v1.4.0）
   ・ルートを表示した履歴を端末内（localStorage）に残し、あとから再表示できる
   ・右上の ☰ でメニューを開ける（地図の上にウインドウで出る）
       校区を調べる … 熊本市の住所別の校区表。あ・か・さ・た・な・は・ま・やらわ の行ごとに見られ、
@@ -133,11 +136,17 @@
           ・熊本市以外：市町村ごと（43市町村）の小学校区・中学校区の一覧を追加
           ・校区データに市町村名（m）を追加（変換ツールも対応）
           ・検索ボタンを押した直後に、入力中の自動絞り込みが表示を消してしまう不具合を修正
+  v1.4.0  境界警告・ハザードマップ・結果画像の保存と共有を追加（土地探しでの使いやすさ向上）
+          ・校区の境界まで150m以内の地点で、校区カードに警告（境界までの距離と、向こう側の校区名）を表示
+          ・「ハザード」ボタンで国土地理院のハザードマップを重ね表示（洪水=浸水想定の最大規模／土砂災害=警戒区域／津波・高潮）
+          ・校区カードに「結果を画像で保存」「共有する」ボタンを追加（地図・校区・学校までの距離入りの画像を作成）
+          ・見やすさの調整：校区カードの学校名を大きく（13.5→15.5px）、ボタン類のタップ領域と文字を拡大、補助文字のコントラストを改善
 
 ■ 使っている無料サービス（すべてカード登録不要）
   ・Leaflet 1.9.4 …………… 地図の表示（CDN: cdnjs）
   ・OpenStreetMap …………… 地図タイル（帰属表示あり）
   ・国土数値情報（国土交通省）… 学校の位置・小学校区・中学校区（data/ に変換して同梱）
+  ・ハザードマップポータルサイト（国土地理院）… 洪水・土砂災害・津波・高潮の重ね表示（タイル配信）
   ・Overpass API（OSM） …… data/schools.json が無いときの予備の学校検索
   ・YOLP ジオコーダ／ローカルサーチ／逆ジオコーダ … 住所・施設の入力検索と、地点の住所表示
   ・Nominatim（OSM） ………… 入力検索の予備（YOLPで見つからないとき）
@@ -156,6 +165,10 @@
   ・校区は国のデータ作成時点のもの。統廃合・校区変更・特認校・選択制は反映されないことがある。
     正式な校区は、必ず市町村の教育委員会で確認してください（画面にも注意を出している）
   ・校区の境目付近は、データを軽くするため線を約12mの精度に簡略化しているので、十数m ずれることがある
+    （v1.4.0〜 境界まで150m以内の地点では校区カードに警告を出す。熊本市の索引簿判定には範囲データが無いため警告は出ない）
+  ・ハザードマップは国土地理院が配信する図の重ね表示。洪水は「想定最大規模」の浸水想定区域。
+    色が付いていない場所でも安全とは限らない（想定を超える雨・データ未整備の河川や区域がある）。土地の判断では
+    市町村のハザードマップと現地確認も併用すること。結果画像へのハザードの焼き込みも、表示中のみ
   ・私立・国立の学校には校区がありません（校区は公立の小・中学校だけ）
   ・data/ の読み込みは https（またはローカルサーバー）でないと動きません。
     index.html をダブルクリックで開くと校区が出ません（Vercelに置けば大丈夫）
@@ -260,11 +273,11 @@ button{ font-family:inherit; cursor:pointer; border:none; background:none; color
   display:flex; align-items:center; gap:8px;
 }
 #findBtn, #menuBtn{
-  width:38px; height:38px; border-radius:50%;
+  width:44px; height:44px; border-radius:50%;
   background:var(--card); box-shadow:var(--shadow); color:var(--ink);
   display:flex; align-items:center; justify-content:center;
 }
-#findBtn svg, #menuBtn svg{ width:18px; height:18px; }
+#findBtn svg, #menuBtn svg{ width:20px; height:20px; }
 
 /* ---- メニューウィンドウ（☰で地図の上に開く） ---- */
 #menuBack{
@@ -397,7 +410,7 @@ button{ font-family:inherit; cursor:pointer; border:none; background:none; color
 .find-row:last-child{ border-bottom:none; }
 .find-main{ flex:1; min-width:0; }
 .find-name{ font-size:14px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.find-addr{ font-size:11.5px; color:#7B8597; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.find-addr{ font-size:12px; color:#66707E; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .find-kind{ flex:none; font-size:10.5px; font-weight:600; border-radius:6px; padding:2px 7px; background:#ECEFF4; color:#5B6578; }
 .find-kind.school{ background:#FFF1DE; color:#B86200; }
 .find-msg{ padding:14px 4px 6px; font-size:13px; color:#7B8597; line-height:1.6; }
@@ -413,12 +426,22 @@ button{ font-family:inherit; cursor:pointer; border:none; background:none; color
 #kuBtn{
   position:fixed; z-index:20; right:12px;
   background:var(--card); box-shadow:var(--shadow);
-  border-radius:999px; padding:10px 13px;
-  font-size:12.5px; font-weight:700; color:var(--ink);
+  border-radius:999px; padding:12px 15px;
+  font-size:13.5px; font-weight:700; color:var(--ink);
   border:2px solid #C9D0DC;
 }
 #kuBtn.e{ border-color:var(--c-e); color:#B86200; }
 #kuBtn.j{ border-color:var(--c-j); color:#237A35; }
+#hzBtn{
+  position:fixed; z-index:20; right:12px;
+  background:var(--card); box-shadow:var(--shadow);
+  border-radius:999px; padding:12px 15px;
+  font-size:13.5px; font-weight:700; color:var(--ink);
+  border:2px solid #C9D0DC;
+}
+#hzBtn.flood{ border-color:#1971C2; color:#1971C2; }
+#hzBtn.dosha{ border-color:#B07D2B; color:#8A5A00; }
+#hzBtn.wave{ border-color:#0B7285; color:#0B7285; }
 
 /* ---- 画面中心の小さな十字（レティクル）。表示だけで押せない ---- */
 #reticle{
@@ -436,17 +459,17 @@ button{ font-family:inherit; cursor:pointer; border:none; background:none; color
 #statusCard{
   position:fixed; z-index:20; left:12px; right:12px;
   background:var(--card); box-shadow:var(--shadow);
-  border-radius:var(--radius); padding:9px 12px;
-  font-size:13px; line-height:1.5; color:#34405A;
-  max-height:36vh; overflow-y:auto;
+  border-radius:var(--radius); padding:12px 14px;
+  font-size:14px; line-height:1.55; color:#34405A;
+  max-height:42vh; overflow-y:auto;
   display:none;
 }
 #statusCard.show{ display:block; }
-#statusCard .src{ font-size:10.5px; color:#8A93A3; margin-top:3px; }
+#statusCard .src{ font-size:11px; color:#707A8C; margin-top:3px; }
 #statusCard .act{ /* カード内の小ボタン共通 */
   display:inline-block; margin:6px 6px 0 0;
-  border-radius:999px; padding:6.5px 12px;
-  font-size:12.5px; font-weight:700;
+  border-radius:999px; padding:9px 14px;
+  font-size:13.5px; font-weight:700;
   background:#ECEFF4; color:var(--ink);
 }
 #statusCard .act.primary{ background:var(--main); color:#fff; }
@@ -455,10 +478,10 @@ button{ font-family:inherit; cursor:pointer; border:none; background:none; color
 .rt{ display:flex; align-items:center; gap:8px; }
 .rt-txt{ flex:1; min-width:0; }
 .rt-txt b{
-  display:block; font-size:13px;
+  display:block; font-size:14px;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
-.rt-txt span{ display:block; font-size:11.5px; color:#7B8597; }
+.rt-txt span{ display:block; font-size:12.5px; color:#66707E; }
 .rt-gmap{
   flex:none; border-radius:999px; padding:7px 11px;
   font-size:11.5px; font-weight:700;
@@ -473,16 +496,16 @@ button{ font-family:inherit; cursor:pointer; border:none; background:none; color
 
 /* 校区カード（調べた地点の住所・小学校区・中学校区・学校の件数） */
 .ku-head{ display:flex; align-items:center; gap:8px; margin-bottom:3px; }
-.ku-head .addr{ flex:1; min-width:0; font-size:12px; color:#5B6578; font-weight:600;
+.ku-head .addr{ flex:1; min-width:0; font-size:13px; color:#4A5568; font-weight:600;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.ku-row{ display:flex; align-items:center; gap:8px; padding:3px 0; }
-.ku-row b{ flex:1; min-width:0; font-size:13.5px;
+.ku-row{ display:flex; align-items:center; gap:8px; padding:4px 0; }
+.ku-row b{ flex:1; min-width:0; font-size:15.5px;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.ku-row .d{ flex:none; font-size:11.5px; color:#7B8597; }
-.ku-row .none{ flex:1; font-size:12.5px; color:#7B8597; }
+.ku-row .d{ flex:none; font-size:12.5px; color:#66707E; }
+.ku-row .none{ flex:1; font-size:13px; color:#66707E; }
 .mini{
-  flex:none; border-radius:999px; padding:5.5px 11px;
-  font-size:11.5px; font-weight:700; background:#FDE7EF; color:var(--route);
+  flex:none; border-radius:999px; padding:8px 14px;
+  font-size:12.5px; font-weight:700; background:#FDE7EF; color:var(--route);
 }
 .tag{ /* 小・中などの四角いしるし */
   flex:none; width:22px; height:22px; border-radius:7px;
@@ -494,9 +517,16 @@ button{ font-family:inherit; cursor:pointer; border:none; background:none; color
 .tag.ref{ opacity:.55; } /* 参考（校区データが無い場所の最寄り校）は薄く */
 .refname small{ font-size:10px; font-weight:700; color:#9A6A00; background:#FFF5D6; border-radius:5px; padding:1px 5px; margin-right:5px; }
 .ku-row b.closed::after{ content:"（休校中）"; font-size:11px; color:#D93025; margin-left:3px; }
-.ku-foot{ font-size:11.5px; color:#7B8597; margin-top:3px; padding-top:4px; border-top:1px solid #EEF0F4; }
+.ku-foot{ font-size:12.5px; color:#66707E; margin-top:3px; padding-top:4px; border-top:1px solid #EEF0F4; }
 .ku-foot b{ color:var(--ink); }
-.ku-note{ font-size:10.5px; color:#9A6A00; margin-top:2px; }
+.ku-note{ font-size:11.5px; color:#9A6A00; margin-top:2px; }
+.ku-warn{ /* 校区の境界付近の警告（v1.4.0） */
+  background:#FFF4D6; border:1.5px solid #E6A800; border-radius:10px;
+  padding:8px 10px; margin-top:7px;
+  font-size:12.5px; line-height:1.55; color:#6B4E00;
+}
+.ku-actions{ display:flex; gap:8px; margin-top:8px; }
+.ku-actions .act{ margin:0 !important; flex:1; text-align:center; }
 
 /* ---- 下部：操作パネル（コンパクトな3段） ---- */
 #panel{
@@ -509,15 +539,15 @@ button{ font-family:inherit; cursor:pointer; border:none; background:none; color
 .panel-row{ display:flex; align-items:center; gap:8px; }
 #searchBtn{
   flex:1.1; background:var(--main); color:#fff;
-  border-radius:12px; padding:12px 6px;
-  font-size:14px; font-weight:700; letter-spacing:.02em;
+  border-radius:12px; padding:13px 6px;
+  font-size:15px; font-weight:700; letter-spacing:.02em;
   font-family:"Zen Maru Gothic",sans-serif;
   box-shadow:0 2px 6px rgba(43,89,168,.3);
 }
 #searchBtn:active, #searchHereBtn:active{ transform:translateY(1px); }
 #searchHereBtn{
-  flex:1; border-radius:12px; padding:12px 6px;
-  font-size:13.5px; font-weight:700;
+  flex:1; border-radius:12px; padding:13px 6px;
+  font-size:14.5px; font-weight:700;
   font-family:"Zen Maru Gothic",sans-serif;
   color:var(--main); border:2px solid var(--main); background:#fff;
 }
@@ -672,7 +702,7 @@ input[type=range]{ flex:1; accent-color:var(--main); height:22px; min-width:0; }
   font-size:14px; font-weight:700;
   display:flex; align-items:center; gap:7px; flex-wrap:wrap;
 }
-.hist-sub{ font-size:12px; color:#7B8597; margin-top:3px; }
+.hist-sub{ font-size:12.5px; color:#66707E; margin-top:3px; }
 .badge{ font-size:10.5px; font-weight:600; border-radius:6px; padding:2px 7px; flex:none; }
 .badge.me{     background:#E8EEF6; color:#456492; } /* 現在地から：淡い青系 */
 .badge.center{ background:#EAE8F0; color:#4F4F6E; } /* ◎ピンから：淡い墨色系 */
@@ -698,6 +728,7 @@ input[type=range]{ flex:1; accent-color:var(--main); height:22px; min-width:0; }
 </div>
 <div id="reticle"></div>
 <button id="kuBtn" title="校区の境目を表示">校区線</button>
+<button id="hzBtn" title="ハザードマップを重ねて表示">ハザード</button>
 <button id="meBtn" title="現在地へ">◉</button>
 
 <div id="statusCard"></div>
@@ -768,7 +799,7 @@ input[type=range]{ flex:1; accent-color:var(--main); height:22px; min-width:0; }
 /* ════════════════════════════════════════════════════════════
    基本設定
    ════════════════════════════════════════════════════════════ */
-const APP_VERSION = '1.3.0';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
+const APP_VERSION = '1.4.0';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
 document.getElementById('verLabel').textContent = 'v' + APP_VERSION;
 
 // Yahoo!のClient ID（コンビニレーダーと同じもの）。住所の入力検索・地点の住所表示に使う
@@ -831,6 +862,7 @@ let kuLineMode = '';                    // 校区線: '' = なし / 'e' = 小学
 let routeLine = null, routeDot = null;  // 学校へのルート（線＋点）
 
 let lastCardHtml = ''; // 校区カードの中身（ルートの×で元に戻すのに使う）
+let lastCardData = null; // 校区カードの内容の控え（結果画像の保存・共有に使う。v1.4.0）
 
 /* ════════════════════════════════════════════════════════════
    地図の初期化
@@ -871,6 +903,7 @@ function placeFloating(){
   const cardH = $('statusCard').classList.contains('show') ? $('statusCard').offsetHeight + 10 : 0;
   $('meBtn').style.bottom = (bottom + cardH) + 'px';
   $('kuBtn').style.bottom = (bottom + cardH + 46 + 10) + 'px'; // ◉(46px)の上に置く
+  $('hzBtn').style.bottom = (bottom + cardH + 46 + 10 + $('kuBtn').offsetHeight + 8) + 'px'; // ハザードは校区線の上に置く
 }
 
 // トースト（1.8秒で自動的に消える）。ふつうは赤（エラー）、info=true なら紺の案内
@@ -987,7 +1020,8 @@ function creditHtml(){
     (m.year ? '・' + esc(m.year) : '') + ' を加工して作成。地図 © OpenStreetMap contributors。<br>' +
     '学校の位置: ' + (DATA.schools ? '国土数値情報（学校）' : 'OpenStreetMap（Overpass API）') +
     '／校区: ' + (DATA.e || DATA.j ? '国土数値情報（小学校区・中学校区）' : 'データ未設置') +
-    (DATA.kmm ? '<br>熊本市の校区: ' + esc(DATA.kmm.src || '熊本市立小中学校 索引簿') + '（' + esc(DATA.kmm.ver || '') + '）を加工して作成' : '');
+    (DATA.kmm ? '<br>熊本市の校区: ' + esc(DATA.kmm.src || '熊本市立小中学校 索引簿') + '（' + esc(DATA.kmm.ver || '') + '）を加工して作成' : '') +
+    '<br>ハザードマップ: ハザードマップポータルサイト（国土地理院）の浸水想定区域・土砂災害警戒区域など';
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -1014,6 +1048,47 @@ function findKu(fc, c){
   return fc.features.filter(f =>
     c.lat >= f._box.s && c.lat <= f._box.n && c.lng >= f._box.w && c.lng <= f._box.e &&
     f._polys.some(poly => inPoly(c.lng, c.lat, poly)));
+}
+
+/* ════════════════════════════════════════════════════════════
+   校区の境界までの距離（境界付近の警告に使う）v1.4.0で追加
+   ════════════════════════════════════════════════════════════ */
+// 点(px,py)と線分(x1,y1)-(x2,y2)の最短距離（メートル換算済みの座標で計算）
+function segDist(px, py, x1, y1, x2, y2){
+  const dx = x2 - x1, dy = y2 - y1;
+  const len2 = dx * dx + dy * dy;
+  let t = len2 === 0 ? 0 : ((px - x1) * dx + (py - y1) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  const cx = x1 + t * dx, cy = y1 + t * dy;
+  return Math.hypot(px - cx, py - cy);
+}
+// 地点 c から、校区 f の境界（すべての輪のすべての辺）までの最短距離（メートル）
+function kuBorderDistM(f, c){
+  let best = Infinity;
+  const kx = 111320 * Math.cos(c.lat * Math.PI / 180); // 経度1度の長さ
+  const ky = 110540;                                    // 緯度1度の長さ
+  const px = c.lng * kx, py = c.lat * ky;
+  f._polys.forEach(poly => poly.forEach(ring => {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++){
+      const d = segDist(px, py, ring[j][0] * kx, ring[j][1] * ky, ring[i][0] * kx, ring[i][1] * ky);
+      if (d < best) best = d;
+    }
+  }));
+  return best;
+}
+// 自分の校区の隣にある校区（境界の向こう側）で一番近いもの。{f, d} か null
+// （約1km四方の外にある校区は、囲む四角の時点で対象外にして軽くする）
+function nearestOtherKu(fc, c, own){
+  if (!fc) return null;
+  let best = null, bestD = Infinity;
+  fc.features.forEach(f => {
+    if (own.includes(f)) return;
+    if (c.lat < f._box.s - 0.01 || c.lat > f._box.n + 0.01 ||
+        c.lng < f._box.w - 0.01 || c.lng > f._box.e + 0.01) return;
+    const d = kuBorderDistM(f, c);
+    if (d < bestD){ bestD = d; best = f; }
+  });
+  return best ? { f: best, d: bestD } : null;
 }
 // 校区の学校の位置。データに入っていればそれを、無ければ学校一覧から名前で探す
 function kuSchool(f, c){
@@ -1586,10 +1661,39 @@ function kuCardHtml(ls, kuSchools, list){
       '<button class="act" style="margin-top:3px" onclick="window.open(KUMAMOTO_CITY_KU, \'_blank\')">公式ページ</button></div>';
   }
 
+  // 校区の境界までの距離と警告（v1.4.0）。国の範囲データで判定できた校区だけが対象
+  let warnHtml = '';
+  [['e', '小学校区'], ['j', '中学校区']].forEach(([cat, label]) => {
+    const own = ls.ku[cat];
+    if (!own || !own.length) return;
+    const d = kuBorderDistM(own[0], ls.c);
+    if (d >= 150) return; // 150m以上離れていれば警告しない
+    const other = nearestOtherKu(DATA[cat], ls.c, own);
+    warnHtml += '<div class="ku-warn">⚠ <b>' + label + 'の境界まで約 ' + fmtDist(d) + '</b> です。' +
+      (other && other.d < 600 ? '境界の向こう側は <b>' + esc(other.f.properties.n.replace(/^.{1,6}?[市町村]立/, '')) + '区</b>です。' : '') +
+      '境界付近はデータの都合で十数mずれることがあります。土地の区画が境界をまたぐ可能性もあるため、正式には教育委員会で確認してください。</div>';
+  });
+
+  // 結果の画像保存・共有に使う控え（v1.4.0）
+  lastCardData = {
+    addr: ls.addr || '',
+    label: ls.label,
+    c: ls.c,
+    e: kuSchools.filter(k => k.cat === 'e'),
+    j: kuSchools.filter(k => k.cat === 'j'),
+    refE: ls.ref && ls.ref.e ? ls.ref.e : null,
+    refJ: ls.ref && ls.ref.j ? ls.ref.j : null,
+    ku: ls.ku,
+    hasWarn: warnHtml !== ''
+  };
+  const actHtml = '<div class="ku-actions">' +
+    '<button class="act primary" onclick="saveResultImage()">🖼 結果を画像で保存</button>' +
+    '<button class="act" onclick="shareResult()">↗ 共有する</button></div>';
+
   return '<div class="ku-head"><span class="addr">📍 ' + esc(ls.addr || ls.label + 'のあたり') + '</span>' +
       '<button class="rt-x" style="width:26px;height:26px;font-size:13px" onclick="clearResults()">×</button></div>' +
     rows +
-    '<div class="ku-foot">' + foot + '</div>' + kmNote +
+    '<div class="ku-foot">' + foot + '</div>' + warnHtml + kmNote +
     (ls.area
       ? '<div class="ku-note">⚠ ' + esc(ls.area) + 'は国の校区データがありません。最寄りの学校は参考で、校区の学校とは限りません。' +
           (ls.area === '熊本市'
@@ -1598,7 +1702,7 @@ function kuCardHtml(ls, kuSchools, list){
       : '') +
     (ls.area || kmNote ? '' : noKuData
       ? '<div class="ku-note">校区データ（data/フォルダ）が読み込めません。リポジトリに data/ フォルダがあるか、https のページで開いているかを確認してください。</div>'
-      : '<div class="ku-note">※校区は' + esc((DATA.meta && DATA.meta.year) || '国のデータ作成時点') + 'のもの。正式には市町村の教育委員会で確認を</div>');
+      : '<div class="ku-note">※校区は' + esc((DATA.meta && DATA.meta.year) || '国のデータ作成時点') + 'のもの。正式には市町村の教育委員会で確認を</div>') + actHtml;
 }
 
 // 検索結果・円・校区・ルートをまとめて消して、地図をきれいにする
@@ -1609,6 +1713,7 @@ function clearResults(){
   shown = [];
   lastSearch = null;
   lastCardHtml = '';
+  lastCardData = null;
   if (searchCircle){ map.removeLayer(searchCircle); searchCircle = null; }
   clearRouteLayers();
   setStatus('');
@@ -1641,6 +1746,37 @@ async function toggleKuLines(){
     }
   }).addTo(allKuLayer);
   showToast(next === 'e' ? '小学校区の境目を表示しました（もう一度押すと中学校区）' : '中学校区の境目を表示しました（もう一度押すと消えます）', true);
+}
+
+/* ════════════════════════════════════════════════════════════
+   ハザードマップの重ね表示（国土地理院・ハザードマップポータル）v1.4.0で追加
+   押すたびに なし → 洪水 → 土砂災害 → 津波・高潮 → なし と切り替わる。
+   データの無い場所のタイルは単に表示されない（エラーにはならない）。
+   ════════════════════════════════════════════════════════════ */
+const HAZARD = {
+  flood: { label: '洪水（浸水想定・最大規模）', layers: ['01_flood_l2_shinsuishin_data'] },
+  dosha: { label: '土砂災害（警戒区域）', layers: ['05_dosekiryukeikaikuiki', '05_kyukeishakeikaikuiki', '05_jisuberikeikaikuiki'] },
+  wave:  { label: '津波・高潮（浸水想定）', layers: ['04_tsunami_newlegend_data', '03_hightide_l2_shinsuishin_data'] }
+};
+let hzMode = '';       // '' = なし / 'flood' / 'dosha' / 'wave'
+let hzLayers = [];     // いま重ねているタイル層
+function toggleHazard(){
+  const order = ['', 'flood', 'dosha', 'wave'];
+  hzMode = order[(order.indexOf(hzMode) + 1) % order.length];
+  hzLayers.forEach(l => map.removeLayer(l));
+  hzLayers = [];
+  const btn = $('hzBtn');
+  btn.className = hzMode;
+  btn.textContent = hzMode ? HAZARD[hzMode].label.split('（')[0] : 'ハザード';
+  if (!hzMode){ showToast('ハザードマップを消しました', true); return; }
+  HAZARD[hzMode].layers.forEach(id => {
+    const l = L.tileLayer('https://disaportaldata.gsi.go.jp/raster/' + id + '/{z}/{x}/{y}.png', {
+      opacity: .55, maxNativeZoom: 17, maxZoom: 19,
+      attribution: '<a href="https://disaportal.gsi.go.jp/" target="_blank">ハザードマップポータルサイト</a>'
+    }).addTo(map);
+    hzLayers.push(l);
+  });
+  showToast('ハザードマップ：' + HAZARD[hzMode].label + ' を重ねました（もう一度押すと次に切り替わります）', true);
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -1843,6 +1979,7 @@ $('searchBtn').addEventListener('click', () => doSearch('me'));
 $('searchHereBtn').addEventListener('click', () => doSearch('map'));
 $('meBtn').addEventListener('click', () => locate(true));
 $('kuBtn').addEventListener('click', toggleKuLines);
+$('hzBtn').addEventListener('click', toggleHazard);
 
 // 学校の種類のチップ：押すたびに表示／非表示（再検索はせず、描き直すだけ）
 $('cats').querySelectorAll('button').forEach(btn => {
@@ -2341,6 +2478,217 @@ async function ktOnMap(i){
 
 $('menuBtn').addEventListener('click', openMenu);
 $('menuBack').addEventListener('click', closeMenu);
+
+/* ════════════════════════════════════════════════════════════
+   結果の画像保存・共有（v1.4.0で追加）
+   地図のタイルと校区の範囲をキャンバスに描き直して、1枚の画像にする。
+   通信できない等で地図が作れないときは、範囲と結果だけの画像に切り替える。
+   ════════════════════════════════════════════════════════════ */
+const IMG_W = 1080, IMG_H = 1440, IMG_MAP_Y = 190, IMG_MAP_H = 720, IMG_ZOOM = 15;
+
+// 緯度経度 → 世界ピクセル座標（地図タイルの計算方法）
+function worldPx(lat, lng, z){
+  const n = Math.pow(2, z) * 256;
+  const latR = lat * Math.PI / 180;
+  return {
+    x: (lng + 180) / 360 * n,
+    y: (1 - Math.log(Math.tan(latR) + 1 / Math.cos(latR)) / Math.PI) / 2 * n
+  };
+}
+// 画像を読み込む（失敗したり6秒たっても来なければ null）
+function loadImg(url){
+  return new Promise(res => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    const timer = setTimeout(() => res(null), 6000);
+    img.onload = () => { clearTimeout(timer); res(img); };
+    img.onerror = () => { clearTimeout(timer); res(null); };
+    img.src = url;
+  });
+}
+// 文字が幅に収まるよう、フォントを小さくしながら描く
+function drawFitText(ctx, text, x, y, maxW, size, color, bold){
+  let s = size;
+  ctx.fillStyle = color;
+  const set = () => { ctx.font = (bold ? '700 ' : '') + s + 'px "Hiragino Sans","Noto Sans JP",sans-serif'; };
+  set();
+  while (s > 18 && ctx.measureText(text).width > maxW){ s -= 2; set(); }
+  if (ctx.measureText(text).width > maxW){
+    while (text.length && ctx.measureText(text + '…').width > maxW) text = text.slice(0, -1);
+    text += '…';
+  }
+  ctx.fillText(text, x, y);
+}
+
+// 結果画像を組み立てる。withTiles=false のときは地図タイルを描かない
+async function buildResultImage(withTiles){
+  const d = lastCardData;
+  const cv = document.createElement('canvas');
+  cv.width = IMG_W; cv.height = IMG_H;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, IMG_W, IMG_H);
+
+  // 見出し
+  ctx.fillStyle = '#2B59A8';
+  ctx.font = '700 46px "Hiragino Sans","Noto Sans JP",sans-serif';
+  ctx.fillText('スクールレーダー 校区チェック結果', 48, 78);
+  drawFitText(ctx, '📍 ' + (d.addr || (d.label + 'のあたり')), 48, 138, IMG_W - 96, 36, '#34405A', false);
+  const now = new Date();
+  ctx.fillStyle = '#8A93A3'; ctx.font = '26px "Hiragino Sans","Noto Sans JP",sans-serif';
+  ctx.fillText(now.getFullYear() + '年' + (now.getMonth() + 1) + '月' + now.getDate() + '日 調べ', 48, 172);
+
+  // 地図の部分
+  const z = IMG_ZOOM;
+  const center = worldPx(d.c.lat, d.c.lng, z);
+  const tl = { x: center.x - IMG_W / 2, y: center.y - IMG_MAP_H / 2 };
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, IMG_MAP_Y, IMG_W, IMG_MAP_H); ctx.clip();
+  ctx.fillStyle = '#E9EDF2'; ctx.fillRect(0, IMG_MAP_Y, IMG_W, IMG_MAP_H);
+  if (withTiles){
+    const x0 = Math.floor(tl.x / 256), x1 = Math.floor((tl.x + IMG_W) / 256);
+    const y0 = Math.floor(tl.y / 256), y1 = Math.floor((tl.y + IMG_MAP_H) / 256);
+    const jobs = [];
+    for (let tx = x0; tx <= x1; tx++) for (let ty = y0; ty <= y1; ty++){
+      jobs.push((async () => {
+        const img = await loadImg('https://tile.openstreetmap.org/' + z + '/' + tx + '/' + ty + '.png');
+        if (img) ctx.drawImage(img, tx * 256 - tl.x, IMG_MAP_Y + ty * 256 - tl.y);
+        if (hzMode){ // ハザード表示中なら、それも画像に入れる
+          for (const id of HAZARD[hzMode].layers){
+            const h = await loadImg('https://disaportaldata.gsi.go.jp/raster/' + id + '/' + z + '/' + tx + '/' + ty + '.png');
+            if (h){ ctx.globalAlpha = .55; ctx.drawImage(h, tx * 256 - tl.x, IMG_MAP_Y + ty * 256 - tl.y); ctx.globalAlpha = 1; }
+          }
+        }
+      })());
+    }
+    await Promise.all(jobs);
+  }
+  const proj = (lat, lng) => { const p = worldPx(lat, lng, z); return [p.x - tl.x, IMG_MAP_Y + p.y - tl.y]; };
+  // 校区の範囲を色で描く
+  const drawKuImg = (f, color, fillA) => {
+    if (!f) return;
+    ctx.beginPath();
+    f._polys.forEach(poly => poly.forEach(ring => {
+      ring.forEach(pt => {
+        const xy = proj(pt[1], pt[0]);
+        if (pt === ring[0]) ctx.moveTo(xy[0], xy[1]); else ctx.lineTo(xy[0], xy[1]);
+      });
+      ctx.closePath();
+    }));
+    ctx.fillStyle = color; ctx.globalAlpha = fillA; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.strokeStyle = color; ctx.lineWidth = 4; ctx.stroke();
+  };
+  (d.ku.j || []).forEach(f => drawKuImg(f, CAT_COLOR.j, .06));
+  (d.ku.e || []).forEach(f => drawKuImg(f, CAT_COLOR.e, .12));
+  // 校区の学校（★）と、調べた地点（中心の丸）
+  const star = (pos, color) => {
+    if (!pos) return;
+    const xy = proj(pos.lat, pos.lng);
+    ctx.beginPath(); ctx.arc(xy[0], xy[1], 17, 0, Math.PI * 2);
+    ctx.fillStyle = color; ctx.fill();
+    ctx.lineWidth = 4; ctx.strokeStyle = '#fff'; ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.font = '700 22px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('★', xy[0], xy[1] + 8); ctx.textAlign = 'left';
+  };
+  d.e.forEach(k => star(k.pos, CAT_COLOR.e));
+  d.j.forEach(k => star(k.pos, CAT_COLOR.j));
+  const cp = proj(d.c.lat, d.c.lng);
+  ctx.beginPath(); ctx.arc(cp[0], cp[1], 15, 0, Math.PI * 2);
+  ctx.fillStyle = '#2B59A8'; ctx.fill();
+  ctx.lineWidth = 5; ctx.strokeStyle = '#fff'; ctx.stroke();
+  ctx.restore();
+  ctx.strokeStyle = '#C9D0DC'; ctx.lineWidth = 2; ctx.strokeRect(0, IMG_MAP_Y, IMG_W, IMG_MAP_H);
+
+  // 結果（小学校区・中学校区）
+  let y = IMG_MAP_Y + IMG_MAP_H + 96;
+  const rowFor = (cat, mark, items, ref) => {
+    ctx.fillStyle = CAT_COLOR[cat];
+    ctx.fillRect(48, y - 46, 56, 56);
+    ctx.fillStyle = '#fff'; ctx.font = '700 32px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(mark, 76, y - 6); ctx.textAlign = 'left';
+    if (items.length){
+      const nm = items.map(k => (k.cand ? '候補 ' : '') + k.name.replace(/^.{1,6}?[市町村]立/, '') + '区').join('・');
+      drawFitText(ctx, nm, 126, y, IMG_W - 174, 50, '#1D2739', true);
+      if (items[0].pos){
+        ctx.fillStyle = '#66707E'; ctx.font = '30px "Hiragino Sans","Noto Sans JP",sans-serif';
+        ctx.fillText('学校まで直線 約 ' + fmtDist(distM(d.c, items[0].pos)), 126, y + 44);
+      }
+    }else if (ref){
+      drawFitText(ctx, '参考・最寄り ' + ref.n, 126, y, IMG_W - 174, 44, '#1D2739', true);
+      ctx.fillStyle = '#66707E'; ctx.font = '30px "Hiragino Sans","Noto Sans JP",sans-serif';
+      ctx.fillText('学校まで直線 約 ' + fmtDist(distM(d.c, { lat: ref.y, lng: ref.x })) + '（校区の学校とは限りません）', 126, y + 44);
+    }else{
+      ctx.fillStyle = '#66707E'; ctx.font = '40px "Hiragino Sans","Noto Sans JP",sans-serif';
+      ctx.fillText(cat === 'e' ? '小学校区のデータがありません' : '中学校区のデータがありません', 126, y);
+    }
+    y += 116;
+  };
+  rowFor('e', '小', d.e, d.refE);
+  rowFor('j', '中', d.j, d.refJ);
+
+  if (d.hasWarn){
+    ctx.fillStyle = '#FFF4D6'; ctx.fillRect(48, y - 40, IMG_W - 96, 64);
+    drawFitText(ctx, '⚠ 校区の境界付近の地点です。正式には教育委員会で確認してください', 64, y + 4, IMG_W - 128, 30, '#6B4E00', true);
+    y += 84;
+  }
+
+  // 脚注
+  ctx.fillStyle = '#8A93A3'; ctx.font = '24px "Hiragino Sans","Noto Sans JP",sans-serif';
+  ctx.fillText('校区は国のデータ作成時点のものです。正式には市町村の教育委員会で確認してください。', 48, IMG_H - 76);
+  ctx.fillText('出典: 国土数値情報（国土交通省）／ 地図 © OpenStreetMap contributors ／ スクールレーダー', 48, IMG_H - 40);
+  return cv;
+}
+function canvasBlob(cv){
+  return new Promise(res => { try{ cv.toBlob(b => res(b), 'image/png'); }catch(e){ res(null); } });
+}
+async function getResultBlob(){
+  let blob = await canvasBlob(await buildResultImage(true));
+  if (!blob) blob = await canvasBlob(await buildResultImage(false)); // 地図なしで作り直す
+  return blob;
+}
+// 「結果を画像で保存」ボタン
+async function saveResultImage(){
+  if (!lastCardData){ showToast('まず地点を調べてください'); return; }
+  showToast('画像を作っています…', true);
+  const blob = await getResultBlob();
+  if (!blob){ showToast('画像を作れませんでした'); return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'school-radar-' + new Date().toISOString().slice(0, 10) + '.png';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  showToast('画像を保存しました', true);
+}
+// 共有する文章（画像で共有できない端末向け）
+function resultShareText(){
+  const d = lastCardData;
+  const nm = (items, ref) => items.length ? items.map(k => k.name).join('・') : (ref ? '参考・最寄り ' + ref.n : '校区データなし');
+  return '【校区チェック結果】\n📍 ' + (d.addr || (d.label + 'のあたり')) +
+    '\n小学校区: ' + nm(d.e, d.refE) +
+    '\n中学校区: ' + nm(d.j, d.refJ) +
+    (d.hasWarn ? '\n⚠ 校区の境界付近の地点です' : '') +
+    '\n※正式には市町村の教育委員会で確認してください';
+}
+// 「共有する」ボタン（画像で共有できれば画像、だめなら文章）
+async function shareResult(){
+  if (!lastCardData){ showToast('まず地点を調べてください'); return; }
+  try{
+    const blob = await getResultBlob();
+    if (blob){
+      const file = new File([blob], 'school-radar.png', { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })){
+        await navigator.share({ files: [file], title: 'スクールレーダーの結果' });
+        return;
+      }
+    }
+  }catch(e){
+    if (e && e.name === 'AbortError') return; // 共有をやめただけ
+  }
+  if (navigator.share){
+    try{ await navigator.share({ title: 'スクールレーダーの結果', text: resultShareText(), url: location.href }); }catch(e){ /* キャンセル等は無視 */ }
+  }else{
+    saveResultImage(); // 共有の仕組みが無い端末では、画像の保存で代用する
+  }
+}
 
 /* ════════════════════════════════════════════════════════════
    起動
