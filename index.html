@@ -2,7 +2,7 @@
 <!--
 ═══════════════════════════════════════════════════════════════════════════
   スクールレーダー （school-radar）
-  現在バージョン: v1.4.3
+  現在バージョン: v1.4.4
 ═══════════════════════════════════════════════════════════════════════════
 
 ■ このファイルでできること
@@ -154,6 +154,17 @@
             広さも画面で見えている範囲と一致するよう補正（拡大率そのままだと画像だけ引きになっていた）
           ・校区カードに「▽ たたむ」ボタンを追加。たたむと住所の行だけになり、地図を広く見て操作できる
             （もう一度押すと広がる。新しい検索をすると自動で広がった状態に戻る）
+  v1.4.4  ルート計算の遠回りを改善
+          ・徒歩ルートが大きく遠回りする事例を確認（小島小学校の例：国道501号沿いの地点から
+            徒歩 約3.9km・約52分と出たが、車では 約1.4km。原因は、これまで使っていた
+            OSRM徒歩用（FOSSGIS）の設定が国道などの幹線道路を徒歩では通れない扱いにし、
+            山を回る道を選んでいたため）
+          ・ルート計算を Valhalla（OSM公開サーバー）優先に変更。徒歩でも国道沿いの道を
+            使えるようになり、同じ地点では 徒歩 約1.5km・約18分 になることを確認した
+            （作業環境での再現テスト。実機での確認はこれから）
+          ・Valhallaが失敗したときは、これまでのOSRMに自動で切り替えて計算する（予備）
+          ・車の所要時間もValhallaの値を使うため、実態より短すぎた表示（1.4kmで約1分など）が
+            緩和される見込み
 
 ■ 使っている無料サービス（すべてカード登録不要）
   ・Leaflet 1.9.4 …………… 地図の表示（CDN: cdnjs）
@@ -163,7 +174,8 @@
   ・Overpass API（OSM） …… data/schools.json が無いときの予備の学校検索
   ・YOLP ジオコーダ／ローカルサーチ／逆ジオコーダ … 住所・施設の入力検索と、地点の住所表示
   ・Nominatim（OSM） ………… 入力検索の予備（YOLPで見つからないとき）
-  ・OSRM（FOSSGIS公開サーバー） … ルート検索（徒歩／車）
+  ・Valhalla（OSM公開サーバー） … ルート検索（徒歩／車）の本命（v1.4.4〜、キー不要）
+  ・OSRM（FOSSGIS公開サーバー） … ルート検索の予備（Valhallaが失敗したときだけ使う）
   ・Google Maps URLs ……… Googleマップをリンクで開くだけ（キー不要）
 
 ■ 知っておいてほしい限界
@@ -186,7 +198,9 @@
   ・data/ の読み込みは https（またはローカルサーバー）でないと動きません。
     index.html をダブルクリックで開くと校区が出ません（Vercelに置けば大丈夫）
   ・位置情報は https のページでしか取れません
-  ・OSRM/Overpassの公開サーバーは混みあうと失敗することがあります（時間をおいて再試行）
+  ・Valhalla/OSRM/Overpassの公開サーバーは混みあうと失敗することがあります（時間をおいて再試行）
+  ・ルートは地図データ（OpenStreetMap）の道路情報から計算します。現地で歩けない道が含まれる
+    可能性もあるので、通学路として使う場合は現地確認とGoogleマップでの確認も併用すること
   ・履歴はこの端末のブラウザの中だけに保存されます（他の端末には出ません）
 ═══════════════════════════════════════════════════════════════════════════
 -->
@@ -863,7 +877,7 @@ input[type=range]{ flex:1; accent-color:var(--main); height:22px; min-width:0; }
 /* ════════════════════════════════════════════════════════════
    基本設定
    ════════════════════════════════════════════════════════════ */
-const APP_VERSION = '1.4.3';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
+const APP_VERSION = '1.4.4';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
 document.getElementById('verLabel').textContent = 'v' + APP_VERSION;
 
 // Yahoo!のClient ID（コンビニレーダーと同じもの）。住所の入力検索・地点の住所表示に使う
@@ -1854,8 +1868,72 @@ function toggleHazard(){
 }
 
 /* ════════════════════════════════════════════════════════════
-   ルート表示（学校へ・OSRM）
+   ルート表示（学校へ）
+   本命は Valhalla（徒歩でも国道などの幹線道路沿いの道を使えるため、
+   OSRM徒歩用で起きた大きな遠回りが起きにくい）。失敗したらOSRMに切り替える
    ════════════════════════════════════════════════════════════ */
+// Valhallaのルートの形は「ポリライン」という圧縮形式で返るので、座標に戻す
+function decodePolyline6(str){
+  const coords = [];
+  let lat = 0, lng = 0, i = 0;
+  while (i < str.length){
+    for (const which of [0, 1]){ // 緯度→経度の順に1つずつ読む
+      let shift = 0, result = 0, byte;
+      do {
+        byte = str.charCodeAt(i++) - 63;
+        result |= (byte & 0x1f) << shift;
+        shift += 5;
+      } while (byte >= 0x20);
+      const value = (result & 1) ? ~(result >> 1) : (result >> 1);
+      if (which === 0) lat += value; else lng += value;
+    }
+    coords.push([lng / 1e6, lat / 1e6]); // GeoJSONと同じ「経度,緯度」の順で返す
+  }
+  return coords;
+}
+
+async function valhallaRoute(from, to, mode){
+  const body = {
+    locations: [
+      { lon: from.lng, lat: from.lat },
+      { lon: to.lng,   lat: to.lat }
+    ],
+    costing: mode === 'car' ? 'auto' : 'pedestrian',
+    directions_options: { units: 'kilometers' }
+  };
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15000);
+  let res;
+  try {
+    res = await fetch('https://valhalla1.openstreetmap.de/route', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: ctrl.signal
+    });
+  } finally { clearTimeout(timer); }
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  const trip = data.trip;
+  if (!trip || !trip.legs || !trip.legs.length || !trip.summary) throw new Error('ルートなし');
+  const coords = decodePolyline6(trip.legs.map(leg => leg.shape).join(''));
+  if (coords.length < 2) throw new Error('ルートなし');
+  return {
+    geometry: { type: 'LineString', coordinates: coords },
+    distance: trip.summary.length * 1000, // km→m
+    duration: trip.summary.time           // 秒
+  };
+}
+
+// ルート計算の入口：まずValhalla、失敗したらOSRM（これまでの計算先）
+async function calcRoute(from, to, mode){
+  try {
+    return await valhallaRoute(from, to, mode);
+  } catch (e) {
+    return await osrmRoute(from, to, mode);
+  }
+}
+
 async function osrmRoute(from, to, mode){
   const prof = mode === 'car'
     ? 'routed-car/route/v1/driving'
@@ -1926,7 +2004,7 @@ async function showRouteTo(dest, saveHist, fit){
   const fromLabel = from.kind === 'center' ? '◎ピン' : '現在地';
   setStatus(esc(dest.name) + ' までの' + modeLabel + 'ルートを計算しています…');
   try{
-    const r = await osrmRoute(from, dest, travelMode);
+    const r = await calcRoute(from, dest, travelMode);
     drawRoute(r.geometry, dest, !!fit);
     currentDest = dest;
     setStatus(routeStatusHtml(
@@ -2609,7 +2687,7 @@ async function fetchImgRoutes(){
   [['e', d.e.find(k => k.pos), d.refE], ['j', d.j.find(k => k.pos), d.refJ]].forEach(([cat, item, ref]) => {
     const to = item ? item.pos : (ref ? { lat: ref.y, lng: ref.x } : null);
     if (!to) return;
-    jobs.push(osrmRoute(d.c, to, 'foot').then(r => {
+    jobs.push(calcRoute(d.c, to, 'foot').then(r => {
       imgRoutes[cat] = { dist: r.distance, dur: r.duration, coords: r.geometry.coordinates };
     }).catch(() => { /* 取れなければルートなしで画像を作る */ }));
   });
