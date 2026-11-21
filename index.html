@@ -2,7 +2,7 @@
 <!--
 ═══════════════════════════════════════════════════════════════════════════
   スクールレーダー （school-radar）
-  現在バージョン: v1.4.6
+  現在バージョン: v1.4.7
 ═══════════════════════════════════════════════════════════════════════════
 
 ■ このファイルでできること
@@ -177,8 +177,12 @@
             その地点に◎ピンを置いて校区を調べる。座標そのもの（例: 32.803, 130.708）の
             貼り付けにも対応
           ・座標がURLに直接入っていない短縮リンク（maps.app.goo.gl等）は、
-            無料の中継サービス（allorigins）経由でリンク先を確認する。
-            中継の状態によっては取れないことがあり、その場合は座標の貼り付けを案内する
+            無料の中継サービス経由でリンク先を確認する方式だったが、実機で取れなかった
+
+  v1.4.7  短縮リンクの解決方法を変更
+          ・短縮リンクは、リンク展開サービス（unshorten.me）で飛び先のURLを取り、
+            そのURLに含まれる座標を読む方式に変更。熊本駅の実リンクで取得を確認済み
+          ・展開サービスが使えないときは、従来の中継サービス（allorigins）を予備に使う
 
 ■ 使っている無料サービス（すべてカード登録不要）
   ・Leaflet 1.9.4 …………… 地図の表示（CDN: cdnjs）
@@ -891,7 +895,7 @@ input[type=range]{ flex:1; accent-color:var(--main); height:22px; min-width:0; }
 /* ════════════════════════════════════════════════════════════
    基本設定
    ════════════════════════════════════════════════════════════ */
-const APP_VERSION = '1.4.6';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
+const APP_VERSION = '1.4.7';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
 document.getElementById('verLabel').textContent = 'v' + APP_VERSION;
 
 // Yahoo!のClient ID（コンビニレーダーと同じもの）。住所の入力検索・地点の住所表示に使う
@@ -2268,9 +2272,19 @@ async function mapsUrlCoords(t){
   const urlM = t.match(/https?:\/\/[^\s　]+/);
   if (!urlM) return null;
   if (!/(goo\.gl|google\.[a-z.]+\/maps|maps\.google\.)/.test(urlM[0])) return null;
-  // 短縮リンク等は座標がURLに入っていないので、中継サービス経由でリンク先の内容から探す
+  // 短縮リンクは座標がURLに入っていないので、リンク展開サービスで飛び先のURLを取る
+  $('findList').innerHTML = '<div class="find-msg">リンク先を確認しています…</div>';
   try{
-    $('findList').innerHTML = '<div class="find-msg">リンク先を確認しています…</div>';
+    const r = await fetch('https://unshorten.me/json/' + encodeURIComponent(urlM[0]));
+    if (r.ok){
+      const j = await r.json();
+      if (j && j.resolved_url){
+        const c = coordsFromText(j.resolved_url) || coordsFromText(decodeURIComponent(j.resolved_url));
+        if (c) return c;
+      }
+    }
+  }catch(e){ /* 予備の方法へ */ }
+  try{
     const res = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(urlM[0]));
     if (!res.ok) return null;
     const body = await res.text();
