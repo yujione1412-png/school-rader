@@ -2,7 +2,7 @@
 <!--
 ═══════════════════════════════════════════════════════════════════════════
   スクールレーダー （school-radar）
-  現在バージョン: v1.4.5
+  現在バージョン: v1.4.6
 ═══════════════════════════════════════════════════════════════════════════
 
 ■ このファイルでできること
@@ -171,6 +171,14 @@
             その土地の位置（?lat=緯度&lng=経度&label=住所）を受け取って開けるようにした
           ・開くと、その地点に◎ピンを置いて、校区とまわりの学校を自動で調べる
             （地図を長押ししたときと同じ調べ方）。現在地は取るが、地図は動かさない
+
+  v1.4.6  Googleマップの共有リンクから地点を調べられるようにした
+          ・場所を探す（🔍）の入力欄に、Googleマップの共有リンク（URL）を貼ると、
+            その地点に◎ピンを置いて校区を調べる。座標そのもの（例: 32.803, 130.708）の
+            貼り付けにも対応
+          ・座標がURLに直接入っていない短縮リンク（maps.app.goo.gl等）は、
+            無料の中継サービス（allorigins）経由でリンク先を確認する。
+            中継の状態によっては取れないことがあり、その場合は座標の貼り付けを案内する
 
 ■ 使っている無料サービス（すべてカード登録不要）
   ・Leaflet 1.9.4 …………… 地図の表示（CDN: cdnjs）
@@ -840,7 +848,7 @@ input[type=range]{ flex:1; accent-color:var(--main); height:22px; min-width:0; }
     <button id="findClose">×</button>
   </div>
   <form id="findForm" autocomplete="off">
-    <input id="findInput" type="search" enterkeyhint="search" placeholder="住所・施設名・学校名（例: 水前寺）">
+    <input id="findInput" type="search" enterkeyhint="search" placeholder="住所・施設名・学校名（マップの共有リンクも可）">
     <button id="findGo" type="submit">検索</button>
   </form>
   <div id="findList"></div>
@@ -883,7 +891,7 @@ input[type=range]{ flex:1; accent-color:var(--main); height:22px; min-width:0; }
 /* ════════════════════════════════════════════════════════════
    基本設定
    ════════════════════════════════════════════════════════════ */
-const APP_VERSION = '1.4.5';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
+const APP_VERSION = '1.4.6';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
 document.getElementById('verLabel').textContent = 'v' + APP_VERSION;
 
 // Yahoo!のClient ID（コンビニレーダーと同じもの）。住所の入力検索・地点の住所表示に使う
@@ -2237,9 +2245,61 @@ async function nominatimSearch(q){
 }
 
 // 入力された言葉で候補を探して一覧に出す
+/* Googleマップの共有リンク・座標の貼り付けから地点を取る（v1.4.6〜） */
+function coordsFromText(t){
+  if (!t) return null;
+  const urlM = t.match(/https?:\/\/[^\s　]+/);
+  const s = urlM ? urlM[0] : t.trim();
+  let m = s.match(/!3d(-?\d{1,3}\.\d+)!4d(-?\d{1,3}\.\d+)/);
+  if (m) return { lat: +m[1], lng: +m[2] };
+  m = s.match(/@(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/);
+  if (m) return { lat: +m[1], lng: +m[2] };
+  m = s.match(/[?&](?:q|ll|query|destination|origin)=(-?\d{1,3}\.\d+)(?:%2C|,)(-?\d{1,3}\.\d+)/i);
+  if (m) return { lat: +m[1], lng: +m[2] };
+  if (!urlM){
+    m = s.match(/^(-?\d{1,3}\.\d{3,})\s*,\s*(-?\d{1,3}\.\d{3,})$/);
+    if (m && Math.abs(+m[1]) <= 90 && Math.abs(+m[2]) <= 180) return { lat: +m[1], lng: +m[2] };
+  }
+  return null;
+}
+async function mapsUrlCoords(t){
+  const direct = coordsFromText(t);
+  if (direct) return direct;
+  const urlM = t.match(/https?:\/\/[^\s　]+/);
+  if (!urlM) return null;
+  if (!/(goo\.gl|google\.[a-z.]+\/maps|maps\.google\.)/.test(urlM[0])) return null;
+  // 短縮リンク等は座標がURLに入っていないので、中継サービス経由でリンク先の内容から探す
+  try{
+    $('findList').innerHTML = '<div class="find-msg">リンク先を確認しています…</div>';
+    const res = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(urlM[0]));
+    if (!res.ok) return null;
+    const body = await res.text();
+    return coordsFromText(body.slice(0, 400000));
+  }catch(e){ return null; }
+}
+
 async function runFind(){
   const q = $('findInput').value.trim();
   if (!q){ $('findInput').focus(); return; }
+  // Googleマップの共有リンク・座標が入力されたら、その地点を直接調べる（v1.4.6〜）
+  if (/https?:\/\//.test(q) || /^-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+$/.test(q)){
+    const mc = await mapsUrlCoords(q);
+    if (mc){
+      if (!inPref(mc)){
+        $('findList').innerHTML = '<div class="find-msg">その地点は熊本県の外です。このアプリは熊本県内のみ対応しています。</div>';
+        return;
+      }
+      closeFind();
+      placePin(mc);
+      clearRouteLayers();
+      searchArea(mc, '共有リンクの地点', true);
+      return;
+    }
+    if (/https?:\/\//.test(q)){
+      $('findList').innerHTML = '<div class="find-msg">リンクから位置が取れませんでした。<br>Googleマップで場所を長押しすると出る座標（例: 32.803, 130.708）を貼るか、住所で検索してみてください。</div>';
+      return;
+    }
+  }
   $('findList').innerHTML = '<div class="find-msg">「' + esc(q) + '」を探しています…</div>';
   await loadData();
   let hits = localSchoolSearch(q); // 学校名に当たれば、それを先頭に
