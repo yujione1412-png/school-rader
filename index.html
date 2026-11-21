@@ -2,7 +2,7 @@
 <!--
 ═══════════════════════════════════════════════════════════════════════════
   スクールレーダー （school-radar）
-  現在バージョン: v1.4.4
+  現在バージョン: v1.4.5
 ═══════════════════════════════════════════════════════════════════════════
 
 ■ このファイルでできること
@@ -165,6 +165,12 @@
           ・Valhallaが失敗したときは、これまでのOSRMに自動で切り替えて計算する（予備）
           ・車の所要時間もValhallaの値を使うため、実態より短すぎた表示（1.4kmで約1分など）が
             緩和される見込み
+
+  v1.4.5  熊本土地リストとの連携
+          ・熊本土地リストの物件カードにある「🏫校区レーダー」ボタンから、
+            その土地の位置（?lat=緯度&lng=経度&label=住所）を受け取って開けるようにした
+          ・開くと、その地点に◎ピンを置いて、校区とまわりの学校を自動で調べる
+            （地図を長押ししたときと同じ調べ方）。現在地は取るが、地図は動かさない
 
 ■ 使っている無料サービス（すべてカード登録不要）
   ・Leaflet 1.9.4 …………… 地図の表示（CDN: cdnjs）
@@ -877,7 +883,7 @@ input[type=range]{ flex:1; accent-color:var(--main); height:22px; min-width:0; }
 /* ════════════════════════════════════════════════════════════
    基本設定
    ════════════════════════════════════════════════════════════ */
-const APP_VERSION = '1.4.4';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
+const APP_VERSION = '1.4.5';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
 document.getElementById('verLabel').textContent = 'v' + APP_VERSION;
 
 // Yahoo!のClient ID（コンビニレーダーと同じもの）。住所の入力検索・地点の住所表示に使う
@@ -2950,8 +2956,19 @@ placeFloating();
 window.addEventListener('resize', placeFloating);
 $('credit').innerHTML = creditHtml();
 loadData(); // 国のデータを先に読み込んでおく（裏で）
-setStatus('現在地を取得しています…（位置情報の許可を求められたら「許可」を押してください）');
-locate(true);
+
+/* 連携リンク（?lat=緯度&lng=経度&label=名前）で開かれたら、その地点を調べる（v1.4.5〜） */
+const LINK_Q = new URLSearchParams(location.search);
+const linkLat = parseFloat(LINK_Q.get('lat')), linkLng = parseFloat(LINK_Q.get('lng'));
+if (isFinite(linkLat) && isFinite(linkLng) && inPref({ lat: linkLat, lng: linkLng })){
+  const linkLabel = (LINK_Q.get('label') || '連携地点').slice(0, 60);
+  placePin(L.latLng(linkLat, linkLng));
+  searchArea({ lat: linkLat, lng: linkLng }, linkLabel, true);
+  locate(false); // 現在地のピンは出すが、地図は連携地点から動かさない
+} else {
+  setStatus('現在地を取得しています…（位置情報の許可を求められたら「許可」を押してください）');
+  locate(true);
+}
 </script>
 </body>
 </html>
