@@ -2,7 +2,7 @@
 <!--
 ═══════════════════════════════════════════════════════════════════════════
   スクールレーダー （school-radar）
-  現在バージョン: v1.4.7
+  現在バージョン: v1.4.8
 ═══════════════════════════════════════════════════════════════════════════
 
 ■ このファイルでできること
@@ -181,8 +181,14 @@
 
   v1.4.7  短縮リンクの解決方法を変更
           ・短縮リンクは、リンク展開サービス（unshorten.me）で飛び先のURLを取り、
-            そのURLに含まれる座標を読む方式に変更。熊本駅の実リンクで取得を確認済み
-          ・展開サービスが使えないときは、従来の中継サービス（allorigins）を予備に使う
+            そのURLに含まれる座標を読む方式に変更したが、実機では取れなかった
+            （unshorten.me はブラウザからの読み取りを許可しておらず、CORSで遮断されていた）
+
+  v1.4.8  短縮リンクの解決方法を再変更
+          ・中継サービス（cors.lol、予備に allorigins）経由でリンク先のページを取り、
+            座標があればその地点を、無ければページ内の場所名・住所を取り出して
+            通常の検索（Yahoo!等）で探す方式に変更
+          ・住所だけの共有リンク（例: 熊本市西区池田2丁目54-28）でも候補が出るようにした
 
 ■ 使っている無料サービス（すべてカード登録不要）
   ・Leaflet 1.9.4 …………… 地図の表示（CDN: cdnjs）
@@ -895,7 +901,7 @@ input[type=range]{ flex:1; accent-color:var(--main); height:22px; min-width:0; }
 /* ════════════════════════════════════════════════════════════
    基本設定
    ════════════════════════════════════════════════════════════ */
-const APP_VERSION = '1.4.7';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
+const APP_VERSION = '1.4.8';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
 document.getElementById('verLabel').textContent = 'v' + APP_VERSION;
 
 // Yahoo!のClient ID（コンビニレーダーと同じもの）。住所の入力検索・地点の住所表示に使う
@@ -2266,39 +2272,60 @@ function coordsFromText(t){
   }
   return null;
 }
+// GoogleマップのURLやページ本文から、場所の名前・住所を取り出す（座標が無いリンク用）
+function placeQueryFromText(t){
+  if (!t) return null;
+  const m = t.match(/\/maps\/place\/([^/"'\\<]+)/);
+  if (!m) return null;
+  let seg = m[1].replace(/\+/g, ' ');
+  try{ seg = decodeURIComponent(seg); }catch(e){}
+  seg = seg.replace(/^\s*〒?\d{3}-\d{4}\s*/, '')
+           .replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
+           .replace(/[−ー]/g, '-').trim();
+  return seg || null;
+}
+
 async function mapsUrlCoords(t){
   const direct = coordsFromText(t);
   if (direct) return direct;
+  // 貼られたURL自体に場所名・住所が入っていれば、それを使う
+  const segQ = placeQueryFromText(t);
+  if (segQ){
+    const c = coordsFromText(segQ);
+    if (c) return c;
+    return { query: segQ };
+  }
   const urlM = t.match(/https?:\/\/[^\s　]+/);
   if (!urlM) return null;
   if (!/(goo\.gl|google\.[a-z.]+\/maps|maps\.google\.)/.test(urlM[0])) return null;
-  // 短縮リンクは座標がURLに入っていないので、リンク展開サービスで飛び先のURLを取る
+  // 短縮リンクは、中継サービス経由でリンク先のページを取り、座標か場所名・住所を探す
   $('findList').innerHTML = '<div class="find-msg">リンク先を確認しています…</div>';
-  try{
-    const r = await fetch('https://unshorten.me/json/' + encodeURIComponent(urlM[0]));
-    if (r.ok){
-      const j = await r.json();
-      if (j && j.resolved_url){
-        const c = coordsFromText(j.resolved_url) || coordsFromText(decodeURIComponent(j.resolved_url));
-        if (c) return c;
+  const proxies = ['https://api.cors.lol/?url=', 'https://api.allorigins.win/raw?url='];
+  for (const p of proxies){
+    try{
+      const res = await fetch(p + encodeURIComponent(urlM[0]));
+      if (!res.ok) continue;
+      const body = (await res.text()).slice(0, 400000);
+      const c = coordsFromText(body);
+      if (c) return c;
+      const q2 = placeQueryFromText(body);
+      if (q2){
+        const c2 = coordsFromText(q2);
+        if (c2) return c2;
+        return { query: q2 };
       }
-    }
-  }catch(e){ /* 予備の方法へ */ }
-  try{
-    const res = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(urlM[0]));
-    if (!res.ok) return null;
-    const body = await res.text();
-    return coordsFromText(body.slice(0, 400000));
-  }catch(e){ return null; }
+    }catch(e){ /* 次の方法へ */ }
+  }
+  return null;
 }
 
 async function runFind(){
-  const q = $('findInput').value.trim();
+  let q = $('findInput').value.trim();
   if (!q){ $('findInput').focus(); return; }
   // Googleマップの共有リンク・座標が入力されたら、その地点を直接調べる（v1.4.6〜）
   if (/https?:\/\//.test(q) || /^-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+$/.test(q)){
     const mc = await mapsUrlCoords(q);
-    if (mc){
+    if (mc && mc.lat){
       if (!inPref(mc)){
         $('findList').innerHTML = '<div class="find-msg">その地点は熊本県の外です。このアプリは熊本県内のみ対応しています。</div>';
         return;
@@ -2309,8 +2336,12 @@ async function runFind(){
       searchArea(mc, '共有リンクの地点', true);
       return;
     }
-    if (/https?:\/\//.test(q)){
-      $('findList').innerHTML = '<div class="find-msg">リンクから位置が取れませんでした。<br>Googleマップで場所を長押しすると出る座標（例: 32.803, 130.708）を貼るか、住所で検索してみてください。</div>';
+    if (mc && mc.query){
+      // 座標は取れなかったが場所名・住所が取れたので、その言葉で通常の検索に切り替える
+      q = mc.query;
+      $('findInput').value = mc.query;
+    }else if (/https?:\/\//.test(q)){
+      $('findList').innerHTML = '<div class="find-msg">リンクから位置が取れませんでした。<br>場所の名前や住所を入力して検索してみてください。</div>';
       return;
     }
   }
