@@ -2,7 +2,7 @@
 <!--
 ═══════════════════════════════════════════════════════════════════════════
   スクールレーダー （school-radar）
-  現在バージョン: v1.4.8
+  現在バージョン: v1.4.9
 ═══════════════════════════════════════════════════════════════════════════
 
 ■ このファイルでできること
@@ -189,6 +189,12 @@
             座標があればその地点を、無ければページ内の場所名・住所を取り出して
             通常の検索（Yahoo!等）で探す方式に変更
           ・住所だけの共有リンク（例: 熊本市西区池田2丁目54-28）でも候補が出るようにした
+
+  v1.4.9  短縮リンクの解決を多段化
+          ・cors.lol は無料枠の利用制限（429）で弾かれることがあるため、リンク展開
+            サービス（microlink）の場所名・住所も使う多段方式に変更
+            （cors.lol → microlink → allorigins → cors.lol再試行）
+          ・候補が無いときは、番地を外した住所でもう一度探すようにした
 
 ■ 使っている無料サービス（すべてカード登録不要）
   ・Leaflet 1.9.4 …………… 地図の表示（CDN: cdnjs）
@@ -901,7 +907,7 @@ input[type=range]{ flex:1; accent-color:var(--main); height:22px; min-width:0; }
 /* ════════════════════════════════════════════════════════════
    基本設定
    ════════════════════════════════════════════════════════════ */
-const APP_VERSION = '1.4.8';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
+const APP_VERSION = '1.4.9';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
 document.getElementById('verLabel').textContent = 'v' + APP_VERSION;
 
 // Yahoo!のClient ID（コンビニレーダーと同じもの）。住所の入力検索・地点の住所表示に使う
@@ -2285,6 +2291,45 @@ function placeQueryFromText(t){
   return seg || null;
 }
 
+// リンク先のページ本文から、座標か場所名・住所を取り出す
+function extractFromPage(body){
+  if (!body) return null;
+  const text = body.slice(0, 400000);
+  const c = coordsFromText(text);
+  if (c) return c;
+  const q = placeQueryFromText(text);
+  if (q){
+    const c2 = coordsFromText(q);
+    if (c2) return c2;
+    return { query: q };
+  }
+  return null;
+}
+
+// リンク展開サービス（microlink）の結果から、座標か検索用の言葉を取り出す
+function queryFromMicrolink(j){
+  if (!j || !j.data) return null;
+  const d = j.data;
+  if (d.url){
+    const c = coordsFromText(d.url);
+    if (c) return c;
+    const q = placeQueryFromText(d.url);
+    if (q) return { query: q };
+  }
+  const title = (d.title || '').trim();
+  if (!title) return null;
+  const parts = title.split(' · ').map(s => s.trim()).filter(Boolean);
+  const name = parts[0] || '';
+  const addr = parts.length > 1 ? parts[parts.length - 1] : '';
+  const addressLike = /^\d+\s*-?\s*(chōme|chome)/i.test(name) || /^\d+-\d+/i.test(name);
+  if (!addressLike && name) return { query: name };
+  let a = (addr || name).replace(/,?\s*Japan\s*$/i, '').replace(/\b\d{3}-\d{4}\b/g, '').replace(/,\s*,/g, ',').trim();
+  // 「2-chōme-54-28 Ikeda」型は「Ikeda 2-54-28」型に直す（地図検索で通りやすい形）
+  const m = a.match(/^(\d+)\s*-?\s*(?:chōme|chome)-(\d+)-(\d+)\s+([^,]+)(.*)$/i);
+  if (m) a = m[4] + ' ' + m[1] + '-' + m[2] + '-' + m[3] + m[5];
+  return a ? { query: a } : null;
+}
+
 async function mapsUrlCoords(t){
   const direct = coordsFromText(t);
   if (direct) return direct;
@@ -2298,24 +2343,28 @@ async function mapsUrlCoords(t){
   const urlM = t.match(/https?:\/\/[^\s　]+/);
   if (!urlM) return null;
   if (!/(goo\.gl|google\.[a-z.]+\/maps|maps\.google\.)/.test(urlM[0])) return null;
-  // 短縮リンクは、中継サービス経由でリンク先のページを取り、座標か場所名・住所を探す
   $('findList').innerHTML = '<div class="find-msg">リンク先を確認しています…</div>';
-  const proxies = ['https://api.cors.lol/?url=', 'https://api.allorigins.win/raw?url='];
-  for (const p of proxies){
-    try{
-      const res = await fetch(p + encodeURIComponent(urlM[0]));
-      if (!res.ok) continue;
-      const body = (await res.text()).slice(0, 400000);
-      const c = coordsFromText(body);
-      if (c) return c;
-      const q2 = placeQueryFromText(body);
-      if (q2){
-        const c2 = coordsFromText(q2);
-        if (c2) return c2;
-        return { query: q2 };
-      }
-    }catch(e){ /* 次の方法へ */ }
-  }
+  const enc = encodeURIComponent(urlM[0]);
+  // 1) 中継サービス経由でページ本文を取る（日本語の住所が取れる）
+  try{
+    const res = await fetch('https://api.cors.lol/?url=' + enc);
+    if (res.ok){ const r = extractFromPage(await res.text()); if (r) return r; }
+  }catch(e){ /* 次の方法へ */ }
+  // 2) リンク展開サービス（microlink）から場所名・住所を取る
+  try{
+    const r2 = await fetch('https://api.microlink.io?url=' + enc);
+    if (r2.ok){ const r = queryFromMicrolink(await r2.json()); if (r) return r; }
+  }catch(e){ /* 次の方法へ */ }
+  // 3) 予備の中継サービス
+  try{
+    const res = await fetch('https://api.allorigins.win/raw?url=' + enc);
+    if (res.ok){ const r = extractFromPage(await res.text()); if (r) return r; }
+  }catch(e){ /* 次の方法へ */ }
+  // 4) 1) は利用制限で弾かれることがあるので、最後にもう一度だけ試す
+  try{
+    const res = await fetch('https://api.cors.lol/?url=' + enc);
+    if (res.ok){ const r = extractFromPage(await res.text()); if (r) return r; }
+  }catch(e){ /* 次の方法へ */ }
   return null;
 }
 
@@ -2361,7 +2410,14 @@ async function runFind(){
     hits = hits.concat(web.filter(inPref));
   }
   if (!hits.length){
-    try{ hits = await nominatimSearch(q); }catch(e){ /* 予備も失敗したら0件扱い */ }
+    try{
+      hits = await nominatimSearch(q);
+      if (!hits.length){
+        // 番地まで入れると見つからないことがあるので、番地を外してもう一度探す
+        const stripped = q.replace(/\d+-\d+(-\d+)?\s*$/, '').trim();
+        if (stripped !== q && stripped.length >= 4) hits = await nominatimSearch(stripped);
+      }
+    }catch(e){ /* 予備も失敗したら0件扱い */ }
   }
   // 同じ名前で50m以内の重複は1件に
   const kept = [];
